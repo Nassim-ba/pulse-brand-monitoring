@@ -1,0 +1,94 @@
+/*
+ * Material Design 3 color roles (generated from seed #769CDF, Material Theme Builder).
+ * MUI toggles the .light / .dark class on <html>; components read these tokens.
+ */
+:root,
+.light {
+  --md-primary: #415f91;
+  --md-on-primary: #ffffff;
+  --md-primary-container: #d6e3ff;
+  --md-on-primary-container: #284777;
+  --md-secondary: #565f71;
+  --md-secondary-container: #dae2f9;
+  --md-on-secondary-container: #3e4759;
+  --md-tertiary: #705575;
+  --md-tertiary-container: #fad8fd;
+  --md-on-tertiary-container: #573e5c;
+  --md-error: #ba1a1a;
+  --md-error-container: #ffdad6;
+  --md-on-error-container: #93000a;
+  --md-success: #2e6b3a;
+  --md-success-container: #b1f1b6;
+  --md-on-success-container: #135227;
+  --md-warning: #7c5800;
+  --md-warning-container: #ffdea6;
+  --md-on-warning-container: #5e4200;
+  --md-surface: #f9f9ff;
+  --md-surface-dim: #d9d9e0;
+  --md-on-surface: #191c20;
+  --md-on-surface-variant: #44474e;
+  --md-surface-container-lowest: #ffffff;
+  --md-surface-container-low: #f3f3fa;
+  --md-surface-container: #ededf4;
+  --md-surface-container-high: #e7e8ee;
+  --md-surface-container-highest: #e2e2e9;
+  --md-outline: #74777f;
+  --md-outline-variant: #c4c6d0;
+  --md-inverse-surface: #2e3036;
+  --md-inverse-on-surface: #f0f0f7;
+  color-scheme: light;
+}
+
+.dark {
+  --md-primary: #aac7ff;
+  --md-on-primary: #0a305f;
+  --md-primary-container: #284777;
+  --md-on-primary-container: #d6e3ff;
+  --md-secondary: #bec6dc;
+  --md-secondary-container: #3e4759;
+  --md-on-secondary-container: #dae2f9;
+  --md-tertiary: #ddbce0;
+  --md-tertiary-container: #573e5c;
+  --md-on-tertiary-container: #fad8fd;
+  --md-error: #ffb4ab;
+  --md-error-container: #93000a;
+  --md-on-error-container: #ffdad6;
+  --md-success: #96d59b;
+  --md-success-container: #135227;
+  --md-on-success-container: #b1f1b6;
+  --md-warning: #f0bf6c;
+  --md-warning-container: #5e4200;
+  --md-on-warning-container: #ffdea6;
+  --md-surface: #111318;
+  --md-surface-dim: #111318;
+  --md-on-surface: #e2e2e9;
+  --md-on-surface-variant: #c4c6d0;
+  --md-surface-container-lowest: #0c0e13;
+  --md-surface-container-low: #191c20;
+  --md-surface-container: #1d2024;
+  --md-surface-container-high: #282a2f;
+  --md-surface-container-highest: #33353a;
+  --md-outline: #8e9099;
+  --md-outline-variant: #44474e;
+  --md-inverse-surface: #e2e2e9;
+  --md-inverse-on-surface: #2e3036;
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--md-surface);
+  color: var(--md-on-surface);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+a {
+  color: inherit;
+}
