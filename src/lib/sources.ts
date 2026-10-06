@@ -154,8 +154,8 @@ export async function fetchLiveMentions(s: Settings): Promise<FetchResult> {
     for (const m of r.value) {
       const text = `${m.title} ${m.content}`.toLowerCase();
       if (excludes.some((e) => text.includes(e))) continue;
-      // Search engines match loosely; keep only items that contain a search term.
-      if (!terms.some((t) => text.includes(t)) && !text.includes(s.brand.split(/\s+/)[0].toLowerCase())) continue;
+      // Hacker News matches loosely; keep only items that contain a search term.
+      if (m.source === "hacker-news" && !terms.some((t) => text.includes(t))) continue;
       // Deduplicate by id and by near-identical title across news sources.
       const titleKey = m.title.toLowerCase().replace(/\s+-\s+[^-]+$/, "").slice(0, 80);
       if (seen.has(m.id) || seen.has(titleKey)) continue;
