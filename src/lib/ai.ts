@@ -64,8 +64,13 @@ Stimmung: Die Haltung gegenüber der Marke, nicht die allgemeine Tonlage des Tex
 Thema, genau eines aus:
 ${topics}
 
-Handlungsbedarf besteht, wenn das Team reagieren sollte: unbeantwortete Beschwerden, Kritik mit Reichweite, direkte Fragen an die Marke, rechtliche oder Reputationsrisiken, Falschinformationen, aber auch Chancen wie Anfragen von Interessenten oder Lob, auf das man öffentlich eingehen sollte. Irrelevante Beiträge haben nie Handlungsbedarf.
-Dringlichkeit: high bei Reputationsrisiko oder viraler Kritik, medium bei Beschwerden und offenen Fragen, low bei Chancen ohne Zeitdruck, none ohne Handlungsbedarf.
+Handlungsbedarf: Sei streng. Markiere nur Beiträge, bei denen das Team konkret etwas tun muss oder eine klare Chance verpasst, wenn es nichts tut. Das sind
+- unbeantwortete Beschwerden und Kritik an Leistung, Service oder Abrechnung,
+- direkte Fragen an die Marke (Bewerbung, Preise, Leistungen),
+- Reputations- oder Rechtsrisiken (Falschinformationen, Gerüchte, Datenschutzvorwürfe),
+- konkrete Geschäftschancen (Interessenten suchen einen Anbieter).
+Kein Handlungsbedarf bei Lob, Erfahrungsberichten ohne Frage, Eigenbeiträgen von Mitarbeitenden, Branchenberichten und neutraler Berichterstattung, auch wenn eine Reaktion nett wäre. Irrelevante Beiträge haben nie Handlungsbedarf. In einem typischen Datensatz trifft Handlungsbedarf auf höchstens ein Drittel der Beiträge zu.
+Dringlichkeit: high bei Reputationsrisiko, Falschinformation, Datenschutz- oder Rechtsthemen und Kritik mit Reichweite. medium bei Beschwerden und offenen Fragen an die Marke. low bei Geschäftschancen ohne Zeitdruck. none ohne Handlungsbedarf.
 
 Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprache des Beitrags, keine leeren Floskeln, keine Gedankenstriche. Bei Bewertungen und Social Media duzen oder siezen wie der Verfasser.
 
