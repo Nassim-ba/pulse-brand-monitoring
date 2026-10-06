@@ -237,7 +237,9 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
 // ---------- Brand profile ----------
 
 const ProfileSchema = z.object({
-  keywords: z.array(z.string()).describe("3 bis 7 Suchbegriffe: Markenname, Schreibweisen, Domain, Produkt- oder Divisionsnamen."),
+  keywords: z
+    .array(z.string())
+    .describe("3 bis 7 spezifische Suchbegriffe: Markenname, gängige Kurzform, Domain, Produkt- oder Divisionsnamen. Keine allgemeinen Wörter oder Städtenamen allein."),
   exclude_keywords: z.array(z.string()).describe("0 bis 5 Begriffe, die auf Verwechslungen hinweisen."),
   hashtags: z.array(z.string()).describe("1 bis 3 Instagram-Hashtags ohne #, nur Buchstaben und Ziffern."),
   context: z.string().describe("2 bis 3 Sätze: Was macht die Marke, Branche, Sitz. Danach, welche gleichnamigen Dinge nicht gemeint sind."),

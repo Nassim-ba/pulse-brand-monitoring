@@ -13,7 +13,8 @@ const token = process.env.APIFY_TOKEN;
 export const apifyEnabled = Boolean(token);
 
 const RESULTS_PER_SOURCE = 20;
-const MAX_CHARGE_USD = 0.25; // hard cost cap per run
+const MAX_CHARGE_USD = 0.5; // hard cost cap per run (Apify minimum)
+const MAX_ITEMS = 25; // charged results per run
 
 export interface ApifySource {
   key: "instagram" | "tiktok" | "googleSearch";
@@ -170,7 +171,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function startRun(source: ApifySource, s: Settings): Promise<{ runId: string; datasetId: string }> {
   const { data } = await api<{ data: { id: string; defaultDatasetId: string } }>(
-    `/acts/${source.actor}/runs?timeout=240&maxTotalChargeUsd=${MAX_CHARGE_USD}`,
+    `/acts/${source.actor}/runs?timeout=240&maxItems=${MAX_ITEMS}&maxTotalChargeUsd=${MAX_CHARGE_USD}`,
     { method: "POST", body: JSON.stringify(source.input(s)) },
   );
   return { runId: data.id, datasetId: data.defaultDatasetId };
