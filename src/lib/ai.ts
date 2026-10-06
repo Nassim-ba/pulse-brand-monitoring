@@ -28,6 +28,7 @@ function describeError(err: unknown): string {
 
 const AnalysisItem = z.object({
   id: z.string(),
+  title: z.string().describe("Der Titel der Eingabe, exakt übernommen. Dient zur Kontrolle der Zuordnung."),
   relevance: z.number().describe("0 bis 100. Wie sicher ist die Erwähnung wirklich die überwachte Marke?"),
   relevance_reason: z.string().describe("Ein kurzer Satz, warum die Relevanz so bewertet wurde."),
   sentiment: z.enum(SENTIMENTS),
@@ -68,12 +69,12 @@ Dringlichkeit: high bei Reputationsrisiko oder viraler Kritik, medium bei Beschw
 
 Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprache des Beitrags, keine leeren Floskeln, keine Gedankenstriche. Bei Bewertungen und Social Media duzen oder siezen wie der Verfasser.
 
-Alle Texte auf Deutsch. Gib für jede Eingabe genau ein Ergebnis mit derselben id zurück.`;
+Alle Texte auf Deutsch. Gib für jede Eingabe genau ein Ergebnis zurück, in derselben Reihenfolge, mit derselben id und dem exakt übernommenen Titel. Bewerte jede Erwähnung nur anhand ihres eigenen Textes.`;
 }
 
-function formatMention(m: RawMention): string {
+function formatMention(m: RawMention, index: number): string {
   return [
-    `<mention id="${m.id}">`,
+    `<mention id="m${index + 1}">`,
     `Quelle: ${m.sourceLabel} (${m.kind})`,
     m.author ? `Autor: ${m.author}` : null,
     `Datum: ${m.publishedAt.slice(0, 10)}`,
@@ -97,10 +98,16 @@ async function analyzeBatch(batch: RawMention[], s: Settings): Promise<Map<strin
     output_config: { format: zodOutputFormat(AnalysisBatch) },
   });
   const now = new Date().toISOString();
+  // Map results back by title first (robust against swapped ids), then by batch index.
+  const norm = (t: string) => t.toLowerCase().replace(/\s+/g, " ").trim();
+  const byTitle = new Map(batch.map((m) => [norm(m.title), m.id]));
   for (const r of response.parsed_output?.results ?? []) {
+    const indexId = batch[Number(r.id.replace(/\D/g, "")) - 1]?.id;
+    const id = byTitle.get(norm(r.title)) ?? indexId;
+    if (!id || out.has(id)) continue;
     const relevance = Math.round(clamp(r.relevance, 0, 100));
     const actionRequired = r.action_required && relevance >= 40;
-    out.set(r.id, {
+    out.set(id, {
       relevance,
       relevanceReason: r.relevance_reason,
       sentiment: r.sentiment,
