@@ -70,6 +70,7 @@ Handlungsbedarf: Sei streng. Markiere nur Beiträge, bei denen das Team konkret 
 - Reputations- oder Rechtsrisiken (Falschinformationen, Gerüchte, Datenschutzvorwürfe),
 - konkrete Geschäftschancen (Interessenten suchen einen Anbieter).
 Kein Handlungsbedarf bei Lob, Erfahrungsberichten ohne Frage, Eigenbeiträgen von Mitarbeitenden, Branchenberichten und neutraler Berichterstattung, auch wenn eine Reaktion nett wäre. Irrelevante Beiträge haben nie Handlungsbedarf. In einem typischen Datensatz trifft Handlungsbedarf auf höchstens ein Drittel der Beiträge zu.
+Reichweite: Wenn Aufrufe, Likes oder Follower angegeben sind, gewichte Kritik mit großer Reichweite dringlicher als Kritik mit kleiner Reichweite.
 Dringlichkeit: high bei Reputationsrisiko, Falschinformation, Datenschutz- oder Rechtsthemen und Kritik mit Reichweite. medium bei Beschwerden und offenen Fragen an die Marke. low bei Geschäftschancen ohne Zeitdruck. none ohne Handlungsbedarf.
 
 Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprache des Beitrags, keine leeren Floskeln, keine Gedankenstriche, keine Platzhalter wie [Name]. Unterschreibe nicht mit einem Namen. Bei Bewertungen und Social Media duzen oder siezen wie der Verfasser.
@@ -77,12 +78,24 @@ Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprach
 Alle Texte auf Deutsch. Gib für jede Eingabe genau ein Ergebnis zurück, in derselben Reihenfolge, mit derselben id und dem exakt übernommenen Titel. Bewerte jede Erwähnung nur anhand ihres eigenen Textes.`;
 }
 
+const formatMetrics = (x: NonNullable<RawMention["metrics"]>) =>
+  [
+    x.views != null ? `${x.views} Aufrufe` : null,
+    x.likes != null ? `${x.likes} Likes` : null,
+    x.comments != null ? `${x.comments} Kommentare` : null,
+    x.shares != null ? `${x.shares} Shares` : null,
+    x.followers != null ? `${x.followers} Follower des Autors` : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
 function formatMention(m: RawMention, index: number): string {
   return [
     `<mention id="m${index + 1}">`,
     `Quelle: ${m.sourceLabel} (${m.kind})`,
     m.author ? `Autor: ${m.author}` : null,
     `Datum: ${m.publishedAt.slice(0, 10)}`,
+    m.metrics ? `Reichweite: ${formatMetrics(m.metrics)}` : null,
     `Titel: ${m.title}`,
     `Text: ${m.content.slice(0, 1500)}`,
     `</mention>`,
@@ -218,5 +231,43 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
     aiStatus.lastError = describeError(err);
     console.error("Claude summary failed, using heuristic fallback:", err);
     return heuristicSummary(analyzed, s.brand);
+  }
+}
+
+// ---------- Brand profile ----------
+
+const ProfileSchema = z.object({
+  keywords: z.array(z.string()).describe("3 bis 7 Suchbegriffe: Markenname, Schreibweisen, Domain, Produkt- oder Divisionsnamen."),
+  exclude_keywords: z.array(z.string()).describe("0 bis 5 Begriffe, die auf Verwechslungen hinweisen."),
+  hashtags: z.array(z.string()).describe("1 bis 3 Instagram-Hashtags ohne #, nur Buchstaben und Ziffern."),
+  context: z.string().describe("2 bis 3 Sätze: Was macht die Marke, Branche, Sitz. Danach, welche gleichnamigen Dinge nicht gemeint sind."),
+});
+
+/** Lets Claude draft a monitoring profile for a newly searched brand. */
+export async function generateProfile(brand: string): Promise<Pick<Settings, "keywords" | "excludeKeywords" | "hashtags" | "context"> | null> {
+  if (!client) return null;
+  try {
+    const response = await client.messages.parse({
+      model: MODEL,
+      max_tokens: 1500,
+      system:
+        "Du richtest Brand Monitoring ein. Erstelle für die genannte Marke ein Suchprofil. Wenn du die Marke nicht sicher kennst, bleib allgemein und erfinde keine Fakten. Antworte auf Deutsch, ohne Gedankenstriche.",
+      messages: [{ role: "user", content: `Marke: ${brand}` }],
+      output_config: { format: zodOutputFormat(ProfileSchema) },
+    });
+    const p = response.parsed_output;
+    if (!p) return null;
+    aiStatus.ok = true;
+    const tidy = (list: string[], max: number) => [...new Set(list.map((x) => x.trim()).filter((x) => x.length >= 2 && x.length <= 60))].slice(0, max);
+    const keywords = tidy([brand, ...p.keywords], 8);
+    return {
+      keywords,
+      excludeKeywords: tidy(p.exclude_keywords, 5),
+      hashtags: tidy(p.hashtags.map((h) => h.replace(/[^\p{L}\p{N}_]/gu, "")), 3),
+      context: clean(p.context)!.slice(0, 1500),
+    };
+  } catch (err) {
+    aiStatus.lastError = describeError(err);
+    return null;
   }
 }

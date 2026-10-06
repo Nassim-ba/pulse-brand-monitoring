@@ -1,11 +1,14 @@
 "use client";
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Snackbar from "@mui/material/Snackbar";
-import type { Mention, MentionStatus, Settings } from "@/lib/types";
+import type { Mention, MentionStatus, SearchJob, Settings } from "@/lib/types";
 
 interface Meta {
   aiEnabled: boolean;
+  apifyEnabled: boolean;
   storageMode: "postgres" | "memory";
+  brands: { slug: string; name: string }[];
+  job: SearchJob | null;
   lastRefresh: string | null;
   aiError: { message: string; at: string } | null;
 }
@@ -19,6 +22,9 @@ interface DataContextValue {
   error: string | null;
   reload: () => Promise<void>;
   refresh: () => Promise<void>;
+  search: (brand: string) => Promise<void>;
+  switchBrand: (slug: string) => Promise<void>;
+  job: SearchJob | null;
   setStatus: (id: string, status: MentionStatus) => Promise<void>;
   saveSettings: (s: Settings) => Promise<boolean>;
   toast: (message: string) => void;
@@ -43,6 +49,9 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [job, setJob] = useState<SearchJob | null>(null);
+  const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pollRef = useRef<() => void>(() => {});
 
   const reload = useCallback(async () => {
     try {
@@ -52,6 +61,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       setMentions(data.mentions);
       setSettings(data.settings);
       setMeta(data.meta);
+      setJob(data.meta.job);
       setError(null);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Fehler beim Laden");
@@ -65,29 +75,85 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
     reload();
   }, [reload]);
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
+  // Poll a running search until all sources are done, then reload the data.
+  const poll = useCallback(async () => {
     try {
-      const res = await fetch("/api/refresh", { method: "POST" });
+      const res = await fetch("/api/search", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
-      if (data.cooldown) {
-        setMessage(`Bitte ${data.cooldown} Sekunden warten, bevor erneut gesucht wird.`);
+      const next: SearchJob | null = data.job;
+      setJob(next);
+      await reload();
+      if (next?.status === "running") {
+        pollTimer.current = setTimeout(() => pollRef.current(), 5000);
       } else {
-        await reload();
-        const errs = data.errors?.length ? ` (${data.errors.join(", ")})` : "";
-        setMessage(
-          data.inserted > 0
-            ? `${data.inserted} neue Erwähnungen gefunden und analysiert${errs}.`
-            : `Keine neuen Erwähnungen gefunden${errs}.`,
-        );
+        setRefreshing(false);
+        if (next) {
+          const total = Object.values(next.sources).reduce((n, x) => n + (x.count ?? 0), 0);
+          setMessage(total ? `${total} neue Erwähnungen gefunden und analysiert.` : "Suche abgeschlossen, keine neuen Erwähnungen.");
+        }
       }
     } catch {
-      setMessage("Aktualisierung fehlgeschlagen. Bitte später erneut versuchen.");
-    } finally {
-      setRefreshing(false);
+      pollTimer.current = setTimeout(() => pollRef.current(), 8000);
     }
   }, [reload]);
+
+  useEffect(() => {
+    pollRef.current = poll;
+  }, [poll]);
+
+  useEffect(() => () => {
+    if (pollTimer.current) clearTimeout(pollTimer.current);
+  }, []);
+
+  // Resume polling if a search was already running when the page was opened.
+  useEffect(() => {
+    if (job?.status === "running" && !pollTimer.current) {
+      setRefreshing(true);
+      pollTimer.current = setTimeout(poll, 3000);
+    }
+  }, [job?.status, poll]);
+
+  const runSearch = useCallback(
+    async (brand?: string) => {
+      setRefreshing(true);
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+      try {
+        const res = await fetch("/api/search", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(brand ? { brand } : {}),
+        });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.error ?? "Suche fehlgeschlagen");
+        setJob(data.job);
+        setLoading(true);
+        await reload();
+        if (data.job.status === "running") pollTimer.current = setTimeout(poll, 4000);
+        else setRefreshing(false);
+      } catch (e) {
+        setMessage(e instanceof Error ? e.message : "Suche fehlgeschlagen");
+        setRefreshing(false);
+      }
+    },
+    [reload, poll],
+  );
+
+  const refresh = useCallback(() => runSearch(), [runSearch]);
+  const search = useCallback((brand: string) => runSearch(brand), [runSearch]);
+
+  const switchBrand = useCallback(
+    async (slug: string) => {
+      if (pollTimer.current) clearTimeout(pollTimer.current);
+      pollTimer.current = null;
+      setRefreshing(false);
+      setLoading(true);
+      await fetch("/api/brands", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ slug }) });
+      await reload();
+    },
+    [reload],
+  );
 
   const setStatus = useCallback(async (id: string, status: MentionStatus) => {
     setMentions((prev) => prev.map((m) => (m.id === id ? { ...m, status } : m)));
@@ -133,13 +199,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       error,
       reload,
       refresh,
+      search,
+      switchBrand,
+      job,
       setStatus,
       saveSettings,
       toast: setMessage,
       selectedId,
       openMention: setSelectedId,
     }),
-    [mentions, settings, meta, loading, refreshing, error, reload, refresh, setStatus, saveSettings, selectedId],
+    [mentions, settings, meta, loading, refreshing, error, reload, refresh, search, switchBrand, job, setStatus, saveSettings, selectedId],
   );
 
   return (

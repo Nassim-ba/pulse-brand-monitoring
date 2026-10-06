@@ -1,6 +1,7 @@
 "use client";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Suspense } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import IconButton from "@mui/material/IconButton";
@@ -23,6 +24,8 @@ import LightMode from "@mui/icons-material/LightModeOutlined";
 import { useData } from "./DataProvider";
 import { MentionDetail } from "./MentionDetail";
 import { PulseLogo } from "./PulseLogo";
+import { BrandSearch } from "./BrandSearch";
+import { SearchProgress } from "./SearchProgress";
 
 const NAV = [
   { href: "/", label: "Übersicht", icon: DashboardOutlined, activeIcon: Dashboard },
@@ -65,42 +68,19 @@ function RefreshButton() {
 
 const isActive = (pathname: string, href: string) => (href === "/" ? pathname === "/" : pathname.startsWith(href));
 
-export function AppShell({ children }: { children: React.ReactNode }) {
+
+/** Filter query params are carried along between dashboard and lists. */
+function WithQuery({ render }: { render: (qs: string) => React.ReactNode }) {
+  const params = useSearchParams();
+  const qs = params.toString();
+  return <>{render(qs ? `?${qs}` : "")}</>;
+}
+
+function RailItems({ qs }: { qs: string }) {
   const pathname = usePathname();
-  const { settings, refresh, refreshing } = useData();
   const openActions = useOpenActions();
-
-  // Source preview pages render without the app chrome.
-  if (pathname.startsWith("/quelle/")) return <>{children}</>;
-
   return (
-    <Box sx={{ display: "flex", minHeight: "100dvh", bgcolor: "var(--md-surface)" }}>
-      {/* Navigation rail (≥ 900 px) */}
-      <Box
-        component="nav"
-        aria-label="Hauptnavigation"
-        sx={{
-          display: { xs: "none", md: "flex" },
-          flexDirection: "column",
-          alignItems: "center",
-          width: 88,
-          flexShrink: 0,
-          position: "sticky",
-          top: 0,
-          height: "100dvh",
-          py: 2,
-          gap: 1.5,
-          bgcolor: "var(--md-surface)",
-        }}
-      >
-        <Box sx={{ mb: 1 }}>
-          <PulseLogo size={36} />
-        </Box>
-        <Tooltip title="Neue Erwähnungen suchen" placement="right">
-          <Fab size="medium" onClick={refresh} disabled={refreshing} aria-label="Neue Erwähnungen suchen" sx={{ mb: 3 }}>
-            {refreshing ? <CircularProgress size={22} /> : <Refresh />}
-          </Fab>
-        </Tooltip>
+    <>
         {NAV.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = active ? item.activeIcon : item.icon;
@@ -108,7 +88,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Box
               key={item.href}
               component={Link}
-              href={item.href}
+              href={item.href === "/einstellungen" ? item.href : item.href + qs}
               aria-current={active ? "page" : undefined}
               sx={{
                 display: "flex",
@@ -144,65 +124,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Box>
           );
         })}
-      </Box>
+    </>
+  );
+}
 
-      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-        {/* Top app bar */}
-        <Box
-          component="header"
-          sx={{
-            position: "sticky",
-            top: 0,
-            zIndex: 10,
-            display: "flex",
-            alignItems: "center",
-            gap: 1,
-            px: { xs: 2, md: 3 },
-            height: 64,
-            bgcolor: "var(--md-surface)",
-            borderBottom: { xs: "1px solid var(--md-outline-variant)", md: "none" },
-          }}
-        >
-          <Box sx={{ display: { xs: "block", md: "none" } }}>
-            <PulseLogo size={28} />
-          </Box>
-          <Box sx={{ minWidth: 0, flex: 1 }}>
-            <Typography variant="caption" sx={{ color: "var(--md-on-surface-variant)", display: "block", lineHeight: 1.2 }}>
-              Pulse · Brand Monitoring
-            </Typography>
-            <Typography variant="h6" noWrap sx={{ lineHeight: 1.25, fontSize: { xs: 18, md: 22 } }}>
-              {settings?.brand ?? " "}
-            </Typography>
-          </Box>
-          <Box sx={{ display: { xs: "block", md: "none" } }}>
-            <RefreshButton />
-          </Box>
-          <ThemeToggle />
-        </Box>
-
-        <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: { xs: 2, md: 1 }, pb: { xs: 13, md: 4 }, maxWidth: 1440, width: "100%", mx: "auto" }}>
-          {children}
-        </Box>
-      </Box>
-
-      {/* Navigation bar (< 900 px) */}
-      <Box
-        component="nav"
-        aria-label="Hauptnavigation"
-        sx={{
-          display: { xs: "flex", md: "none" },
-          position: "fixed",
-          bottom: 0,
-          left: 0,
-          right: 0,
-          zIndex: 20,
-          height: 80,
-          pb: "env(safe-area-inset-bottom)",
-          bgcolor: "var(--md-surface-container)",
-          justifyContent: "space-around",
-          alignItems: "center",
-        }}
-      >
+function BarItems({ qs }: { qs: string }) {
+  const pathname = usePathname();
+  const openActions = useOpenActions();
+  return (
+    <>
         {NAV.map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = active ? item.activeIcon : item.icon;
@@ -210,7 +140,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <Box
               key={item.href}
               component={Link}
-              href={item.href}
+              href={item.href === "/einstellungen" ? item.href : item.href + qs}
               aria-current={active ? "page" : undefined}
               sx={{
                 flex: 1,
@@ -245,6 +175,117 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Box>
           );
         })}
+    </>
+  );
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const { settings, refresh, refreshing } = useData();
+
+  // Source preview pages render without the app chrome.
+  if (pathname.startsWith("/quelle/")) return <>{children}</>;
+
+  return (
+    <Box sx={{ display: "flex", minHeight: "100dvh", bgcolor: "var(--md-surface)" }}>
+      {/* Navigation rail (≥ 900 px) */}
+      <Box
+        component="nav"
+        aria-label="Hauptnavigation"
+        sx={{
+          display: { xs: "none", md: "flex" },
+          flexDirection: "column",
+          alignItems: "center",
+          width: 88,
+          flexShrink: 0,
+          position: "sticky",
+          top: 0,
+          height: "100dvh",
+          py: 2,
+          gap: 1.5,
+          bgcolor: "var(--md-surface)",
+        }}
+      >
+        <Box sx={{ mb: 1 }}>
+          <PulseLogo size={36} />
+        </Box>
+        <Tooltip title="Neue Erwähnungen suchen" placement="right">
+          <Fab size="medium" onClick={refresh} disabled={refreshing} aria-label="Neue Erwähnungen suchen" sx={{ mb: 3 }}>
+            {refreshing ? <CircularProgress size={22} /> : <Refresh />}
+          </Fab>
+        </Tooltip>
+        <Suspense fallback={<RailItems qs="" />}>
+          <WithQuery render={(qs) => <RailItems qs={qs} />} />
+        </Suspense>
+      </Box>
+
+      <Box sx={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
+        {/* Top app bar */}
+        <Box
+          component="header"
+          sx={{
+            position: "sticky",
+            top: 0,
+            zIndex: 10,
+            display: "flex",
+            alignItems: "center",
+            gap: 1,
+            px: { xs: 2, md: 3 },
+            height: 64,
+            bgcolor: "var(--md-surface)",
+            borderBottom: { xs: "1px solid var(--md-outline-variant)", md: "none" },
+          }}
+        >
+          <Box sx={{ display: { xs: "block", md: "none" } }}>
+            <PulseLogo size={28} />
+          </Box>
+          <Box sx={{ minWidth: 0, flex: { xs: 1, md: "0 1 260px" } }}>
+            <Typography variant="caption" sx={{ color: "var(--md-on-surface-variant)", display: "block", lineHeight: 1.2 }}>
+              Pulse · Brand Monitoring
+            </Typography>
+            <Typography variant="h6" noWrap sx={{ lineHeight: 1.25, fontSize: { xs: 18, md: 22 } }}>
+              {settings?.brand ?? " "}
+            </Typography>
+          </Box>
+          <Box sx={{ display: { xs: "none", md: "flex" }, flex: 1, justifyContent: "center", px: 2 }}>
+            <BrandSearch />
+          </Box>
+          <Box sx={{ display: { xs: "block", md: "none" } }}>
+            <RefreshButton />
+          </Box>
+          <ThemeToggle />
+        </Box>
+
+        <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: { xs: 2, md: 1 }, pb: { xs: 13, md: 4 }, maxWidth: 1440, width: "100%", mx: "auto" }}>
+          <Box sx={{ display: { xs: "block", md: "none" }, mb: 2 }}>
+            <BrandSearch />
+          </Box>
+          <SearchProgress />
+          {children}
+        </Box>
+      </Box>
+
+      {/* Navigation bar (< 900 px) */}
+      <Box
+        component="nav"
+        aria-label="Hauptnavigation"
+        sx={{
+          display: { xs: "flex", md: "none" },
+          position: "fixed",
+          bottom: 0,
+          left: 0,
+          right: 0,
+          zIndex: 20,
+          height: 80,
+          pb: "env(safe-area-inset-bottom)",
+          bgcolor: "var(--md-surface-container)",
+          justifyContent: "space-around",
+          alignItems: "center",
+        }}
+      >
+        <Suspense fallback={<BarItems qs="" />}>
+          <WithQuery render={(qs) => <BarItems qs={qs} />} />
+        </Suspense>
       </Box>
 
       <MentionDetail />

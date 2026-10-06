@@ -55,7 +55,7 @@ async function googleNews(s: Settings): Promise<RawMention[]> {
     const publisher = typeof it.source === "string" ? it.source : it.source?.["#text"];
     const title = stripHtml(String(it.title ?? ""));
     return {
-      id: mentionId(String(it.link)),
+      id: mentionId(`${brandSlug(s.brand)}:${String(it.link)}`),
       brand: brandSlug(s.brand),
       source: "google-news",
       sourceLabel: publisher ? `Google News · ${publisher}` : "Google News",
@@ -84,7 +84,7 @@ async function bingNews(s: Settings): Promise<RawMention[]> {
       } catch {}
       const title = stripHtml(String(it.title));
       return {
-        id: mentionId(url),
+        id: mentionId(`${brandSlug(s.brand)}:${url}`),
         brand: brandSlug(s.brand),
         source: "bing-news",
         sourceLabel: "Bing News",
@@ -113,7 +113,7 @@ async function hackerNews(s: Settings): Promise<RawMention[]> {
     const url = `https://news.ycombinator.com/item?id=${h.objectID}`;
     const title = h.title ?? h.story_title ?? "Kommentar auf Hacker News";
     return {
-      id: mentionId(url),
+      id: mentionId(`${brandSlug(s.brand)}:${url}`),
       brand: brandSlug(s.brand),
       source: "hacker-news",
       sourceLabel: "Hacker News",

@@ -1,4 +1,4 @@
-import type { RawMention, SourceKind } from "./types";
+import type { Metrics, RawMention, SourceKind } from "./types";
 
 /**
  * Synthetic demo mentions for "ATZ Group". All persons, handles and posts are
@@ -110,6 +110,21 @@ const SEEDS: Seed[] = [
     "Dank der Vorab-Terminierung durch ATZ hatten wir auf der Hannover Messe 35 qualifizierte Gespräche. Bester Messeauftritt bisher."],
 ];
 
+/** Fixed reach for posts that matter in the demo story; others get plausible values. */
+const REACH: Record<number, Metrics> = {
+  1: { views: 48_300, likes: 1_240, comments: 312, shares: 96, followers: 18_400 }, // cold-call thread goes viral
+  6: { views: 23_100, likes: 410, comments: 158, shares: 64, followers: 9_800 }, // insolvency rumour
+  12: { views: 15_600, likes: 980, comments: 41, followers: 22_000 }, // employer award
+  23: { views: 6_900, likes: 210, comments: 87, shares: 12, followers: 3_100 }, // GDPR complaint
+};
+
+function demoMetrics(i: number, kind: SourceKind): Metrics | null {
+  if (REACH[i + 1]) return REACH[i + 1];
+  if (kind !== "social") return null;
+  const views = 400 + ((i * 7919) % 5200);
+  return { views, likes: Math.round(views * 0.04), comments: Math.round(views * 0.006), followers: 800 + ((i * 3571) % 6000) };
+}
+
 export function demoMentions(brand: string): RawMention[] {
   const now = Date.now();
   return SEEDS.map(([days, source, author, title, content], i) => {
@@ -128,6 +143,7 @@ export function demoMentions(brand: string): RawMention[] {
       // Add a pseudo-random hour offset so items don't all share the same time of day.
       publishedAt: new Date(now - days * 86_400_000 - ((i * 37) % 9) * 3_600_000).toISOString(),
       isDemo: true,
+      metrics: demoMetrics(i, s.kind),
     };
   });
 }

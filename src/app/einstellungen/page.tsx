@@ -11,6 +11,7 @@ import Save from "@mui/icons-material/Save";
 import RestartAlt from "@mui/icons-material/RestartAlt";
 import AutoAwesome from "@mui/icons-material/AutoAwesome";
 import Storage from "@mui/icons-material/Storage";
+import Hub from "@mui/icons-material/Hub";
 import { useData } from "@/components/DataProvider";
 import { SectionTitle } from "@/components/bits";
 import { DEFAULT_SETTINGS as ATZ_DEFAULTS } from "@/lib/defaults";
@@ -80,7 +81,7 @@ export default function SettingsPage() {
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- sync form once settings arrive
-    if (settings && !form) setForm(settings);
+    if (settings && (!form || form.brand !== settings.brand)) setForm(settings);
   }, [settings, form]);
 
   if (!form) return null;
@@ -118,7 +119,12 @@ export default function SettingsPage() {
       <Card>
         <SectionTitle>Marke</SectionTitle>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
-          <TextField label="Markenname" value={form.brand} onChange={(e) => set("brand", e.target.value)} />
+          <TextField
+            label="Markenname"
+            value={form.brand}
+            slotProps={{ input: { readOnly: true } }}
+            helperText="Eine andere Marke startest du über die Suche oben."
+          />
           <TermsInput
             label="Suchbegriffe hinzufügen"
             helper="Mit Enter oder Komma bestätigen. Diese Begriffe werden in den Live-Quellen gesucht."
@@ -130,6 +136,12 @@ export default function SettingsPage() {
             helper="Treffer mit diesen Begriffen werden verworfen."
             value={form.excludeKeywords}
             onChange={(v) => set("excludeKeywords", v)}
+          />
+          <TermsInput
+            label="Instagram-Hashtags hinzufügen"
+            helper="Ohne #. Diese Hashtags durchsucht der Instagram-Scraper."
+            value={form.hashtags}
+            onChange={(v) => set("hashtags", v.map((h) => h.replace(/[^\p{L}\p{N}_]/gu, "")).filter((h) => h.length >= 2).slice(0, 5))}
           />
           <TextField
             label="Kontext für die KI"
@@ -147,6 +159,9 @@ export default function SettingsPage() {
         <SwitchRow label="Google News" hint="Nachrichtenartikel, live" checked={form.sources.googleNews} onChange={(v) => set("sources", { ...form.sources, googleNews: v })} />
         <SwitchRow label="Bing News" hint="Nachrichtenartikel, live" checked={form.sources.bingNews} onChange={(v) => set("sources", { ...form.sources, bingNews: v })} />
         <SwitchRow label="Hacker News" hint="Tech-Community, live" checked={form.sources.hackerNews} onChange={(v) => set("sources", { ...form.sources, hackerNews: v })} />
+        <SwitchRow label="Google Suche" hint="Organische Suchergebnisse über Apify" checked={form.sources.googleSearch} onChange={(v) => set("sources", { ...form.sources, googleSearch: v })} />
+        <SwitchRow label="Instagram" hint="Posts zu den Hashtags inklusive Likes und Kommentaren, über Apify" checked={form.sources.instagram} onChange={(v) => set("sources", { ...form.sources, instagram: v })} />
+        <SwitchRow label="TikTok" hint="Videos zur Marke inklusive Aufrufen und Engagement, über Apify" checked={form.sources.tiktok} onChange={(v) => set("sources", { ...form.sources, tiktok: v })} />
         <SwitchRow
           label="Demo-Datensatz"
           hint="Synthetische Beiträge aus Social Media, Bewertungsportalen und Foren (nur für ATZ Group)"
@@ -191,6 +206,17 @@ export default function SettingsPage() {
                 {meta?.storageMode === "postgres"
                   ? "Erwähnungen, Analysen und Status werden dauerhaft gespeichert."
                   : "Daten liegen nur im Arbeitsspeicher und gehen beim Neustart verloren."}
+              </Typography>
+            </Box>
+          </Box>
+          <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
+            <Hub sx={{ color: "var(--md-tertiary)", mt: 0.25 }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="body1">{meta?.apifyEnabled ? "Social-Media-Scraping aktiv" : "Social-Media-Scraping inaktiv"}</Typography>
+              <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
+                {meta?.apifyEnabled
+                  ? "Instagram, TikTok und die Google-Suche werden über Apify abgefragt. Pro Quelle und Suche höchstens 20 Ergebnisse."
+                  : "Kein Apify-Token hinterlegt. Pulse sucht nur in den News-Quellen."}
               </Typography>
             </Box>
           </Box>

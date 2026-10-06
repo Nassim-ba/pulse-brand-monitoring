@@ -1,44 +1,34 @@
 "use client";
-import { useMemo, useState } from "react";
+import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
 import Skeleton from "@mui/material/Skeleton";
+import ButtonBase from "@mui/material/ButtonBase";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import ArrowForward from "@mui/icons-material/ArrowForward";
 import TrendingUp from "@mui/icons-material/TrendingUp";
 import TrendingDown from "@mui/icons-material/TrendingDown";
+import Visibility from "@mui/icons-material/VisibilityOutlined";
+import FavoriteBorder from "@mui/icons-material/FavoriteBorder";
+import ChatBubbleOutline from "@mui/icons-material/ChatBubbleOutlineOutlined";
 import { useData } from "@/components/DataProvider";
 import { SummaryCard } from "@/components/SummaryCard";
 import { MentionCard } from "@/components/MentionCard";
-import { SegmentedButton } from "@/components/SegmentedButton";
-import { SectionTitle, SENTIMENT_COLORS } from "@/components/bits";
-import { applyFilters, byUrgency } from "@/lib/filters";
+import { FilterBar } from "@/components/FilterBar";
+import { SectionTitle, SENTIMENT_COLORS, SentimentTag, SourceAvatar, compact } from "@/components/bits";
+import { useFilters } from "@/hooks/useFilters";
+import { applyFilters, byReach, byUrgency, interactions, reach } from "@/lib/filters";
 import { KIND_LABELS, RELEVANCE_THRESHOLD, SENTIMENT_LABELS, TOPIC_LABELS } from "@/lib/labels";
-import { SENTIMENTS, SOURCE_KINDS, TOPICS, type Mention, type MentionFilters } from "@/lib/types";
+import { SENTIMENTS, SOURCE_KINDS, TOPICS, type Mention } from "@/lib/types";
 
-type Range = "7d" | "30d" | "90d";
-const RANGES: { value: Range; label: string; days: number }[] = [
-  { value: "7d", label: "7 Tage", days: 7 },
-  { value: "30d", label: "30 Tage", days: 30 },
-  { value: "90d", label: "90 Tage", days: 90 },
-];
+const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
+const RANGE_LABELS: Record<string, string> = { "7d": "Letzte 7 Tage", "30d": "Letzte 30 Tage", "90d": "Letzte 90 Tage", all: "Gesamter Zeitraum" };
+const PLATFORM_COLORS = ["var(--md-primary)", "var(--md-tertiary)", "var(--md-secondary)", "var(--md-outline)", "var(--md-success)", "var(--md-warning)"];
 
-function Kpi({
-  label,
-  value,
-  hint,
-  trend,
-  tone = "default",
-}: {
-  label: string;
-  value: string | number;
-  hint?: string;
-  trend?: number | null;
-  tone?: "default" | "error";
-}) {
+function Kpi({ label, value, hint, trend, tone = "default" }: { label: string; value: string | number; hint?: string; trend?: number | null; tone?: "default" | "error" }) {
   return (
     <Box
       sx={{
@@ -52,10 +42,8 @@ function Kpi({
       <Typography variant="body2" sx={{ opacity: 0.85 }}>
         {label}
       </Typography>
-      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mt: 0.5 }}>
-        <Typography sx={{ fontSize: { xs: 32, md: 40 }, lineHeight: 1.1, fontWeight: 400, fontVariantNumeric: "tabular-nums" }}>
-          {value}
-        </Typography>
+      <Box sx={{ display: "flex", alignItems: "baseline", gap: 1, mt: 0.5, flexWrap: "wrap" }}>
+        <Typography sx={{ fontSize: { xs: 30, md: 36 }, lineHeight: 1.1, fontWeight: 400, fontVariantNumeric: "tabular-nums" }}>{value}</Typography>
         {trend != null && trend !== 0 ? (
           <Box sx={{ display: "inline-flex", alignItems: "center", gap: 0.25, fontSize: 13, fontWeight: 500, color: trend > 0 ? "var(--md-success)" : "var(--md-error)" }}>
             {trend > 0 ? <TrendingUp sx={{ fontSize: 18 }} /> : <TrendingDown sx={{ fontSize: 18 }} />}
@@ -90,34 +78,73 @@ const netSentiment = (list: Mention[]) => {
   return Math.round(((pos - neg) / a.length) * 100);
 };
 
-export default function Dashboard() {
+const platformOf = (m: Mention) => m.sourceLabel.split(" · ")[0];
+
+function Stat({ icon, value }: { icon: React.ReactNode; value: number }) {
+  return (
+    <Box sx={{ display: "inline-flex", gap: 0.5, alignItems: "center", fontSize: 12 }}>
+      {icon} {compact(value)}
+    </Box>
+  );
+}
+
+function TopPost({ m }: { m: Mention }) {
+  const { openMention } = useData();
+  const x = m.metrics ?? {};
+  return (
+    <ButtonBase
+      onClick={() => openMention(m.id)}
+      sx={{ display: "flex", gap: 1.5, alignItems: "flex-start", textAlign: "left", width: "100%", p: 1, borderRadius: 3, "&:hover": { bgcolor: "var(--md-surface-container-high)" } }}
+    >
+      <SourceAvatar kind={m.kind} size={36} />
+      <Box sx={{ minWidth: 0, flex: 1 }}>
+        <Typography variant="caption" sx={{ color: "var(--md-on-surface-variant)" }} noWrap component="div">
+          {platformOf(m)}
+          {m.author ? ` · ${m.author}` : ""}
+        </Typography>
+        <Typography variant="body2" sx={{ fontWeight: 500 }} noWrap>
+          {m.analysis?.summary ?? m.title}
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1.5, mt: 0.5, alignItems: "center", flexWrap: "wrap", color: "var(--md-on-surface-variant)", "& svg": { fontSize: 15 } }}>
+          {m.analysis ? <SentimentTag sentiment={m.analysis.sentiment} /> : null}
+          {x.views != null ? <Stat icon={<Visibility />} value={x.views} /> : null}
+          {x.likes != null ? <Stat icon={<FavoriteBorder />} value={x.likes} /> : null}
+          {x.comments != null ? <Stat icon={<ChatBubbleOutline />} value={x.comments} /> : null}
+        </Box>
+      </Box>
+    </ButtonBase>
+  );
+}
+
+function DashboardView() {
   const { mentions, loading, error, meta } = useData();
-  const [range, setRange] = useState<Range>("30d");
+  const { filters } = useFilters();
   const [now] = useState(() => Date.now());
-  const rangeDef = RANGES.find((r) => r.value === range)!;
-  const filters: MentionFilters = useMemo(() => ({ range }), [range]);
+  const range = filters.range ?? "all";
+  const days = RANGE_DAYS[range];
 
   const stats = useMemo(() => {
     const current = applyFilters(mentions, filters);
-    const since = now - rangeDef.days * 86_400_000;
-    const prevSince = since - rangeDef.days * 86_400_000;
-    const previous = applyFilters(mentions, {}).filter((m) => {
-      const t = new Date(m.publishedAt).getTime();
-      return t >= prevSince && t < since;
-    });
-    const irrelevant = mentions.filter(
-      (m) => m.analysis && m.analysis.relevance < RELEVANCE_THRESHOLD && new Date(m.publishedAt).getTime() >= since,
+    const previous = days
+      ? applyFilters(mentions, { ...filters, range: "all" }).filter((m) => {
+          const t = new Date(m.publishedAt).getTime();
+          return t >= now - 2 * days * 86_400_000 && t < now - days * 86_400_000;
+        })
+      : null;
+    const irrelevant = applyFilters(mentions, { ...filters, includeIrrelevant: true }).filter(
+      (m) => m.analysis && m.analysis.relevance < RELEVANCE_THRESHOLD,
     );
     const actions = current.filter((m) => m.analysis?.actionRequired && m.status === "open").sort(byUrgency);
 
-    // Timeline buckets: days for ≤ 30 days, weeks for 90 days.
-    const bucketDays = rangeDef.days > 30 ? 7 : 1;
-    const bucketCount = Math.ceil(rangeDef.days / bucketDays);
+    // Timeline: daily up to 30 days, weekly otherwise ("all" spans the data, max 26 weeks).
+    const oldest = current.reduce((t, m) => Math.min(t, new Date(m.publishedAt).getTime()), now);
+    const spanDays = days ?? Math.min(182, Math.max(28, Math.ceil((now - oldest) / 86_400_000) + 1));
+    const bucketDays = spanDays > 30 ? 7 : 1;
+    const bucketCount = Math.ceil(spanDays / bucketDays);
     const buckets = Array.from({ length: bucketCount }, (_, i) => {
       const end = now - (bucketCount - 1 - i) * bucketDays * 86_400_000;
-      const d = new Date(end);
       return {
-        label: d.toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }),
+        label: new Date(end).toLocaleDateString("de-DE", { day: "2-digit", month: "2-digit" }),
         start: end - bucketDays * 86_400_000,
         end,
         positive: 0,
@@ -136,8 +163,15 @@ export default function Dashboard() {
       .sort((a, b) => b.count - a.count);
     const kinds = SOURCE_KINDS.map((k) => ({ kind: k, count: current.filter((m) => m.kind === k).length })).filter((x) => x.count > 0);
 
-    return { current, previous, irrelevant, actions, buckets, topics, kinds };
-  }, [mentions, filters, rangeDef.days, now]);
+    const withReach = current.filter((m) => reach(m) > 0);
+    const totalReach = withReach.reduce((n, m) => n + reach(m), 0);
+    const topPosts = [...withReach].sort(byReach).slice(0, 5);
+    const platformMap = new Map<string, number>();
+    for (const m of withReach) platformMap.set(platformOf(m), (platformMap.get(platformOf(m)) ?? 0) + interactions(m));
+    const platforms = [...platformMap].map(([name, value]) => ({ name, value })).sort((a, b) => b.value - a.value);
+
+    return { current, previous, irrelevant, actions, buckets, topics, kinds, totalReach, topPosts, platforms };
+  }, [mentions, filters, days, now]);
 
   if (error) {
     return (
@@ -152,58 +186,54 @@ export default function Dashboard() {
 
   const net = netSentiment(stats.current);
   const high = stats.actions.filter((m) => m.analysis?.urgency === "high").length;
+  const narrowed = filters.sources?.length || filters.sentiments?.length || filters.topics?.length || filters.actionOnly;
+  const scopeLabel = RANGE_LABELS[range] + (narrowed ? ", gefiltert" : "");
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2, md: 3 } }}>
-      <Box sx={{ display: "flex", alignItems: { xs: "flex-start", sm: "center" }, justifyContent: "space-between", gap: 2, flexDirection: { xs: "column", sm: "row" } }}>
-        <Box>
-          <Typography variant="h5" component="h1" sx={{ fontSize: { xs: 24, md: 28 } }}>
-            Übersicht
-          </Typography>
-          <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
-            {meta?.lastRefresh
-              ? `Zuletzt aktualisiert ${new Date(meta.lastRefresh).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`
-              : "Live-Quellen noch nicht abgefragt, Aktualisieren startet die Suche"}
-          </Typography>
-        </Box>
-        <SegmentedButton ariaLabel="Zeitraum" value={range} onChange={setRange} options={RANGES} />
+      <Box>
+        <Typography variant="h5" component="h1" sx={{ fontSize: { xs: 24, md: 28 } }}>
+          Übersicht
+        </Typography>
+        <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
+          {meta?.lastRefresh
+            ? `Zuletzt gesucht ${new Date(meta.lastRefresh).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`
+            : "Noch keine Live-Suche, Aktualisieren startet die Suche"}
+        </Typography>
       </Box>
 
-      {loading ? (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" }, gap: 2 }}>
-          {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 4 }} />
-          ))}
-        </Box>
-      ) : (
-        <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", lg: "repeat(4, minmax(0, 1fr))" }, gap: { xs: 1.5, md: 2 } }}>
-          <Kpi
-            label="Relevante Erwähnungen"
-            value={stats.current.length}
-            trend={stats.current.length - stats.previous.length}
-            hint={`Vorperiode: ${stats.previous.length}`}
-          />
-          <Kpi
-            label="Stimmungsindex"
-            value={`${net > 0 ? "+" : ""}${net}`}
-            trend={net - netSentiment(stats.previous)}
-            hint="Anteil positiv minus negativ, in %"
-          />
-          <Kpi
-            label="Offener Handlungsbedarf"
-            value={stats.actions.length}
-            hint={high ? `${high} mit hoher Dringlichkeit` : "Keine hohe Dringlichkeit"}
-            tone={high ? "error" : "default"}
-          />
-          <Kpi
-            label="Von der KI aussortiert"
-            value={stats.irrelevant.length}
-            hint="Verwechslungen und Fremdtreffer"
-          />
-        </Box>
-      )}
+      <FilterBar />
 
-      <SummaryCard filters={filters} scopeLabel={`Letzte ${rangeDef.label}`} />
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "repeat(2, minmax(0, 1fr))", lg: "repeat(5, minmax(0, 1fr))" }, gap: { xs: 1.5, md: 2 } }}>
+        {loading ? (
+          [0, 1, 2, 3, 4].map((i) => <Skeleton key={i} variant="rounded" height={120} sx={{ borderRadius: 4 }} />)
+        ) : (
+          <>
+            <Kpi
+              label="Relevante Erwähnungen"
+              value={stats.current.length}
+              trend={stats.previous ? stats.current.length - stats.previous.length : null}
+              hint={stats.previous ? `Vorperiode: ${stats.previous.length}` : "Alle Zeiträume"}
+            />
+            <Kpi
+              label="Stimmungsindex"
+              value={`${net > 0 ? "+" : ""}${net}`}
+              trend={stats.previous ? net - netSentiment(stats.previous) : null}
+              hint="Anteil positiv minus negativ, in %"
+            />
+            <Kpi label="Reichweite" value={compact(stats.totalReach)} hint="Aufrufe und Publikum der Beiträge" />
+            <Kpi
+              label="Offener Handlungsbedarf"
+              value={stats.actions.length}
+              hint={high ? `${high} mit hoher Dringlichkeit` : "Keine hohe Dringlichkeit"}
+              tone={high ? "error" : "default"}
+            />
+            <Kpi label="Von der KI aussortiert" value={stats.irrelevant.length} hint="Verwechslungen und Fremdtreffer" />
+          </>
+        )}
+      </Box>
+
+      <SummaryCard filters={filters} scopeLabel={scopeLabel} />
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "minmax(0, 2fr) minmax(0, 1fr)" }, gap: { xs: 2, md: 3 } }}>
         <Panel title="Verlauf nach Stimmung">
@@ -226,7 +256,7 @@ export default function Dashboard() {
             />
           )}
         </Panel>
-        <Panel title="Quellen">
+        <Panel title="Quellenarten">
           {loading ? (
             <Skeleton variant="rounded" height={260} />
           ) : (
@@ -234,12 +264,7 @@ export default function Dashboard() {
               height={260}
               series={[
                 {
-                  data: stats.kinds.map((k, i) => ({
-                    id: k.kind,
-                    value: k.count,
-                    label: KIND_LABELS[k.kind],
-                    color: ["var(--md-primary)", "var(--md-tertiary)", "var(--md-secondary)", "var(--md-outline)"][i % 4],
-                  })),
+                  data: stats.kinds.map((k, i) => ({ id: k.kind, value: k.count, label: KIND_LABELS[k.kind], color: PLATFORM_COLORS[i % PLATFORM_COLORS.length] })),
                   innerRadius: 56,
                   paddingAngle: 3,
                   cornerRadius: 6,
@@ -252,6 +277,56 @@ export default function Dashboard() {
       </Box>
 
       <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "repeat(2, minmax(0, 1fr))" }, gap: { xs: 2, md: 3 } }}>
+        <Panel
+          title="Top-Beiträge nach Reichweite"
+          action={
+            <Button size="small" endIcon={<ArrowForward />} component={Link} href="/erwaehnungen?sort=reach">
+              Alle
+            </Button>
+          }
+        >
+          <Box sx={{ display: "flex", flexDirection: "column", gap: 0.5 }}>
+            {loading ? (
+              <Skeleton variant="rounded" height={240} />
+            ) : stats.topPosts.length ? (
+              stats.topPosts.map((m) => <TopPost key={m.id} m={m} />)
+            ) : (
+              <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
+                Noch keine Social-Media-Beiträge mit Reichweitendaten.
+              </Typography>
+            )}
+          </Box>
+        </Panel>
+        <Panel title="Engagement nach Plattform">
+          {loading ? (
+            <Skeleton variant="rounded" height={240} />
+          ) : stats.platforms.length ? (
+            <BarChart
+              height={Math.max(160, 48 * stats.platforms.length + 60)}
+              layout="horizontal"
+              yAxis={[{ scaleType: "band", data: stats.platforms.map((p) => p.name), width: 110, tickLabelStyle: { fontSize: 12 } }]}
+              xAxis={[{ valueFormatter: (v: number | null) => compact(v ?? 0) }]}
+              series={[
+                {
+                  data: stats.platforms.map((p) => p.value),
+                  label: "Interaktionen (Likes, Kommentare, Shares)",
+                  color: "var(--md-primary)",
+                  valueFormatter: (v: number | null) => compact(v ?? 0),
+                },
+              ]}
+              borderRadius={4}
+              margin={{ left: 0, right: 16, top: 8, bottom: 0 }}
+              slotProps={{ legend: { position: { vertical: "top", horizontal: "start" } } }}
+            />
+          ) : (
+            <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
+              Noch keine Engagement-Daten.
+            </Typography>
+          )}
+        </Panel>
+      </Box>
+
+      <Box sx={{ display: "grid", gridTemplateColumns: { xs: "minmax(0, 1fr)", lg: "repeat(2, minmax(0, 1fr))" }, gap: { xs: 2, md: 3 } }}>
         <Panel title="Themen">
           {loading ? (
             <Skeleton variant="rounded" height={260} />
@@ -259,8 +334,7 @@ export default function Dashboard() {
             <Box sx={{ display: "flex", flexDirection: "column", gap: 1.5 }}>
               {stats.topics.map((t) => {
                 const max = stats.topics[0]?.count ?? 1;
-                const list = stats.current.filter((m) => m.analysis?.topic === t.topic);
-                const neg = list.filter((m) => m.analysis?.sentiment === "negative").length;
+                const neg = stats.current.filter((m) => m.analysis?.topic === t.topic && m.analysis.sentiment === "negative").length;
                 return (
                   <Box key={t.topic} component={Link} href={`/erwaehnungen?topic=${t.topic}`} sx={{ textDecoration: "none", color: "inherit" }}>
                     <Box sx={{ display: "flex", justifyContent: "space-between", mb: 0.5 }}>
@@ -277,7 +351,7 @@ export default function Dashboard() {
                   </Box>
                 );
               })}
-              {!stats.topics.length ? <Typography variant="body2">Keine Daten im Zeitraum.</Typography> : null}
+              {!stats.topics.length ? <Typography variant="body2">Keine Daten für diese Auswahl.</Typography> : null}
             </Box>
           )}
         </Panel>
@@ -302,5 +376,13 @@ export default function Dashboard() {
         </Panel>
       </Box>
     </Box>
+  );
+}
+
+export default function Dashboard() {
+  return (
+    <Suspense>
+      <DashboardView />
+    </Suspense>
   );
 }

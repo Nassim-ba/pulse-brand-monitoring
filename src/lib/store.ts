@@ -1,16 +1,15 @@
 import "server-only";
 import { neon } from "@neondatabase/serverless";
 import { DEFAULT_SETTINGS } from "./defaults";
-import type { Analysis, Mention, MentionStatus, RawMention, Settings } from "./types";
+import { brandSlug } from "./filters";
+import type { Analysis, Mention, MentionStatus, Metrics, RawMention, Settings } from "./types";
 
 /**
  * Persistence layer. Uses Postgres (Neon) when DATABASE_URL is set, otherwise
  * an in-memory store so the app also runs locally without any setup.
  */
 
-interface Store {
-  getSettings(): Promise<Settings>;
-  saveSettings(s: Settings): Promise<void>;
+interface BaseStore {
   listMentions(brand: string): Promise<Mention[]>;
   insertMentions(items: RawMention[]): Promise<number>;
   saveAnalysis(id: string, analysis: Analysis): Promise<void>;
@@ -22,7 +21,7 @@ interface Store {
 
 // ---------- Postgres ----------
 
-function createPgStore(url: string): Store {
+function createPgStore(url: string): BaseStore {
   const sql = neon(url);
   let ready: Promise<unknown> | null = null;
 
@@ -44,6 +43,7 @@ function createPgStore(url: string): Store {
         analysis jsonb,
         status text NOT NULL DEFAULT 'open'
       )`;
+      await sql`ALTER TABLE mentions ADD COLUMN IF NOT EXISTS metrics jsonb`;
       await sql`CREATE INDEX IF NOT EXISTS mentions_brand_idx ON mentions (brand, published_at DESC)`;
       await sql`CREATE TABLE IF NOT EXISTS kv (
         key text PRIMARY KEY,
@@ -67,15 +67,10 @@ function createPgStore(url: string): Store {
     isDemo: r.is_demo as boolean,
     analysis: (r.analysis as Analysis) ?? null,
     status: r.status as MentionStatus,
+    metrics: (r.metrics as Metrics) ?? null,
   });
 
-  const store: Store = {
-    async getSettings() {
-      return { ...DEFAULT_SETTINGS, ...((await store.getKv<Settings>("settings")) ?? {}) };
-    },
-    async saveSettings(s) {
-      await store.setKv("settings", s);
-    },
+  const store: BaseStore = {
     async listMentions(brand) {
       await init();
       const rows = await sql`SELECT * FROM mentions WHERE brand = ${brand} ORDER BY published_at DESC LIMIT 1000`;
@@ -85,10 +80,12 @@ function createPgStore(url: string): Store {
       await init();
       let inserted = 0;
       for (const m of items) {
+        // Skip duplicates by id and by URL within the same brand.
         const rows = await sql`INSERT INTO mentions
-          (id, brand, source, source_label, kind, title, content, url, author, published_at, is_demo)
-          VALUES (${m.id}, ${m.brand}, ${m.source}, ${m.sourceLabel}, ${m.kind}, ${m.title}, ${m.content},
-                  ${m.url}, ${m.author}, ${m.publishedAt}, ${m.isDemo})
+          (id, brand, source, source_label, kind, title, content, url, author, published_at, is_demo, metrics)
+          SELECT ${m.id}, ${m.brand}, ${m.source}, ${m.sourceLabel}, ${m.kind}, ${m.title}, ${m.content},
+                 ${m.url}, ${m.author}, ${m.publishedAt}, ${m.isDemo}, ${m.metrics ? JSON.stringify(m.metrics) : null}::jsonb
+          WHERE NOT EXISTS (SELECT 1 FROM mentions WHERE brand = ${m.brand} AND url = ${m.url})
           ON CONFLICT (id) DO NOTHING RETURNING id`;
         inserted += rows.length;
       }
@@ -123,19 +120,13 @@ function createPgStore(url: string): Store {
 
 // ---------- In-memory ----------
 
-function createMemoryStore(): Store {
+function createMemoryStore(): BaseStore {
   const g = globalThis as unknown as {
     __pulse?: { mentions: Map<string, Mention>; kv: Map<string, unknown> };
   };
   const db = (g.__pulse ??= { mentions: new Map(), kv: new Map() });
 
   return {
-    async getSettings() {
-      return { ...DEFAULT_SETTINGS, ...((db.kv.get("settings") as Settings) ?? {}) };
-    },
-    async saveSettings(s) {
-      db.kv.set("settings", s);
-    },
     async listMentions(brand) {
       return [...db.mentions.values()]
         .filter((m) => m.brand === brand)
@@ -144,7 +135,7 @@ function createMemoryStore(): Store {
     async insertMentions(items) {
       let inserted = 0;
       for (const m of items) {
-        if (db.mentions.has(m.id)) continue;
+        if (db.mentions.has(m.id) || [...db.mentions.values()].some((x) => x.brand === m.brand && x.url === m.url)) continue;
         db.mentions.set(m.id, { ...m, fetchedAt: new Date().toISOString(), analysis: null, status: "open" });
         inserted++;
       }
@@ -174,5 +165,52 @@ function createMemoryStore(): Store {
 
 const dbUrl = process.env.DATABASE_URL ?? process.env.POSTGRES_URL;
 
-export const store: Store = dbUrl ? createPgStore(dbUrl) : createMemoryStore();
+const base: BaseStore = dbUrl ? createPgStore(dbUrl) : createMemoryStore();
+
+// ---------- Brand profiles (shared by both backends) ----------
+
+function withDefaults(p: Partial<Settings>): Settings {
+  return {
+    ...DEFAULT_SETTINGS,
+    ...p,
+    hashtags: p.hashtags ?? (p.brand && p.brand !== DEFAULT_SETTINGS.brand ? [p.brand.toLowerCase().replace(/[^a-z0-9]/g, "")] : DEFAULT_SETTINGS.hashtags),
+    sources: { ...DEFAULT_SETTINGS.sources, ...(p.sources ?? {}) },
+  };
+}
+
+export interface BrandEntry {
+  slug: string;
+  name: string;
+}
+
+async function getProfile(slug: string): Promise<Settings | null> {
+  const p = await base.getKv<Settings>(`profile:${slug}`);
+  if (p) return withDefaults(p);
+  if (slug === brandSlug(DEFAULT_SETTINGS.brand)) {
+    // Pre-profile installations stored a single "settings" record.
+    const legacy = await base.getKv<Settings>("settings");
+    return withDefaults(legacy && brandSlug(legacy.brand) === slug ? legacy : DEFAULT_SETTINGS);
+  }
+  return null;
+}
+
+export const store = {
+  ...base,
+  getProfile,
+  async getSettings(): Promise<Settings> {
+    const active = (await base.getKv<string>("activeBrand")) ?? brandSlug(DEFAULT_SETTINGS.brand);
+    return (await getProfile(active)) ?? withDefaults(DEFAULT_SETTINGS);
+  },
+  /** Saves the profile and makes it the active brand. */
+  async saveSettings(s: Settings): Promise<void> {
+    const slug = brandSlug(s.brand);
+    await base.setKv(`profile:${slug}`, s);
+    await base.setKv("activeBrand", slug);
+    const brands = (await base.getKv<BrandEntry[]>("brands")) ?? [{ slug: brandSlug(DEFAULT_SETTINGS.brand), name: DEFAULT_SETTINGS.brand }];
+    await base.setKv("brands", [{ slug, name: s.brand }, ...brands.filter((b) => b.slug !== slug)].slice(0, 12));
+  },
+  async listBrands(): Promise<BrandEntry[]> {
+    return (await base.getKv<BrandEntry[]>("brands")) ?? [{ slug: brandSlug(DEFAULT_SETTINGS.brand), name: DEFAULT_SETTINGS.brand }];
+  },
+};
 export const storageMode: "postgres" | "memory" = dbUrl ? "postgres" : "memory";

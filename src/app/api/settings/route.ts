@@ -5,8 +5,16 @@ const SettingsSchema = z.object({
   brand: z.string().trim().min(2).max(60),
   keywords: z.array(z.string().trim().min(2).max(60)).max(15),
   excludeKeywords: z.array(z.string().trim().min(2).max(60)).max(15),
+  hashtags: z.array(z.string().trim().regex(/^[\p{L}\p{N}_]{2,40}$/u)).max(5),
   context: z.string().trim().max(1500),
-  sources: z.object({ googleNews: z.boolean(), bingNews: z.boolean(), hackerNews: z.boolean() }),
+  sources: z.object({
+    googleNews: z.boolean(),
+    bingNews: z.boolean(),
+    hackerNews: z.boolean(),
+    googleSearch: z.boolean(),
+    instagram: z.boolean(),
+    tiktok: z.boolean(),
+  }),
   demoData: z.boolean(),
 });
 

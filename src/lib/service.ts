@@ -1,12 +1,16 @@
 import "server-only";
-import { aiEnabled, aiStatus, analyzeMentions, summarize } from "./ai";
+import { aiEnabled, aiStatus, analyzeMentions, generateProfile, summarize } from "./ai";
+import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
+import { basicProfile } from "./defaults";
 import { demoMentions } from "./demo-data";
 import { applyFilters, brandSlug } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
-import type { Mention, MentionFilters, Settings, Summary } from "./types";
+import type { Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
 
-const REFRESH_COOLDOWN_MS = 60_000;
+const SEARCH_COOLDOWN_MS = 10 * 60_000; // per brand
+const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget on the public demo
+const DEMO_VERSION = 2;
 
 export class CooldownError extends Error {}
 
@@ -31,10 +35,11 @@ export async function loadMentions(): Promise<{ settings: Settings; mentions: Me
   const brand = brandSlug(settings.brand);
 
   if (settings.demoData && brand === "atz-group") {
-    const seeded = await store.getKv<boolean>(`seeded:${brand}`);
-    if (!seeded) {
+    const seeded = await store.getKv<number | boolean>(`seeded:${brand}`);
+    if (seeded !== DEMO_VERSION) {
+      if (seeded) await store.deleteDemo(brand); // reseed when the demo set changed
       await store.insertMentions(demoMentions(brand));
-      await store.setKv(`seeded:${brand}`, true);
+      await store.setKv(`seeded:${brand}`, DEMO_VERSION);
     }
   }
 
@@ -54,26 +59,131 @@ export async function loadMentions(): Promise<{ settings: Settings; mentions: Me
   return { settings, mentions };
 }
 
-export interface RefreshResult {
-  fetched: number;
-  inserted: number;
-  errors: string[];
-  cooldown?: number;
+// ---------- Brand search ----------
+
+export class LimitError extends Error {}
+
+const jobKey = (slug: string) => `job:${slug}`;
+
+/**
+ * Starts a search for a brand: creates the profile (via Claude for new brands),
+ * fetches news synchronously and starts the Apify runs, which are polled later.
+ */
+export async function startSearch(brandName?: string): Promise<SearchJob> {
+  const current = await store.getSettings();
+  const name = (brandName ?? current.brand).trim().slice(0, 60);
+  const slug = brandSlug(name);
+
+  const existing = await store.getKv<SearchJob>(jobKey(slug));
+  let settings = await store.getProfile(slug);
+  if (!settings) {
+    const profile = await generateProfile(name);
+    await recordAiStatus();
+    settings = { ...basicProfile(name), ...(profile ?? {}) };
+  }
+  await store.saveSettings(settings);
+
+  // Recent or running searches are reused instead of paying again.
+  if (existing && (existing.status === "running" || Date.now() - new Date(existing.startedAt).getTime() < SEARCH_COOLDOWN_MS)) {
+    return existing;
+  }
+
+  const day = new Date().toISOString().slice(0, 10);
+  const used = (await store.getKv<number>(`searches:${day}`)) ?? 0;
+  if (used >= DAILY_SEARCH_LIMIT) throw new LimitError("Tageslimit für Suchen erreicht. Bitte morgen erneut versuchen.");
+  await store.setKv(`searches:${day}`, used + 1);
+
+  const job: SearchJob = {
+    id: `${slug}-${Date.now()}`,
+    brand: slug,
+    brandName: settings.brand,
+    startedAt: new Date().toISOString(),
+    status: "running",
+    sources: {},
+  };
+
+  // News feeds answer within seconds.
+  const news = await fetchLiveMentions(settings);
+  const inserted = await store.insertMentions(news.mentions);
+  job.sources.news = {
+    label: "News (Google, Bing, Hacker News)",
+    status: news.errors.length && !news.mentions.length ? "error" : "done",
+    count: inserted,
+    note: news.errors.join(", ") || undefined,
+  };
+
+  await Promise.all(
+    APIFY_SOURCES.map(async (src) => {
+      if (!settings.sources[src.key]) {
+        job.sources[src.key] = { label: src.label, status: "skipped", note: "In den Einstellungen deaktiviert" };
+      } else if (!apifyEnabled) {
+        job.sources[src.key] = { label: src.label, status: "skipped", note: "Kein Apify-Token hinterlegt" };
+      } else {
+        try {
+          const { runId, datasetId } = await startRun(src, settings);
+          job.sources[src.key] = { label: src.label, status: "running", runId, datasetId };
+        } catch (err) {
+          console.error(`Apify start failed (${src.key}):`, err);
+          job.sources[src.key] = { label: src.label, status: "error", note: "Start fehlgeschlagen" };
+        }
+      }
+    }),
+  );
+
+  job.status = Object.values(job.sources).some((x) => x.status === "running") ? "running" : "done";
+  await store.setKv(jobKey(slug), job);
+  await store.setKv(`lastRefresh:${slug}`, job.startedAt);
+  return job;
 }
 
-export async function refresh(): Promise<RefreshResult> {
+/** Checks running Apify runs, imports finished results and analyses them. */
+export async function pollSearch(): Promise<SearchJob | null> {
   const settings = await store.getSettings();
-  const brand = brandSlug(settings.brand);
-  const last = await store.getKv<number>(`refresh:${brand}`);
-  if (last && Date.now() - last < REFRESH_COOLDOWN_MS) {
-    return { fetched: 0, inserted: 0, errors: [], cooldown: Math.ceil((REFRESH_COOLDOWN_MS - (Date.now() - last)) / 1000) };
-  }
-  await store.setKv(`refresh:${brand}`, Date.now());
+  const slug = brandSlug(settings.brand);
+  const job = await store.getKv<SearchJob>(jobKey(slug));
+  if (!job || job.status === "done") return job;
 
-  const { mentions, errors } = await fetchLiveMentions(settings);
-  const inserted = await store.insertMentions(mentions);
-  await store.setKv(`lastRefresh:${brand}`, new Date().toISOString());
-  return { fetched: mentions.length, inserted, errors };
+  // Give up on runs that hang far beyond their own timeout.
+  const stale = Date.now() - new Date(job.startedAt).getTime() > 6 * 60_000;
+
+  await Promise.all(
+    APIFY_SOURCES.map(async (src) => {
+      const entry = job.sources[src.key];
+      if (!entry || entry.status !== "running" || !entry.runId || !entry.datasetId) return;
+      try {
+        const state = await runState(entry.runId);
+        if (state === "running") {
+          if (stale) Object.assign(entry, { status: "error", note: "Zeitüberschreitung" });
+          return;
+        }
+        // Failed runs may still have partial results.
+        const items = await fetchResults(src, entry.datasetId, settings);
+        const excludes = settings.excludeKeywords.map((k) => k.toLowerCase());
+        const kept = items.filter((m) => !excludes.some((e) => `${m.title} ${m.content}`.toLowerCase().includes(e)));
+        const inserted = await store.insertMentions(kept);
+        Object.assign(entry, {
+          status: state === "failed" && !items.length ? "error" : "done",
+          count: inserted,
+          note: state === "failed" ? "Lauf abgebrochen" : undefined,
+        });
+      } catch (err) {
+        console.error(`Apify poll failed (${src.key}):`, err);
+        if (stale) Object.assign(entry, { status: "error", note: "Abruf fehlgeschlagen" });
+      }
+    }),
+  );
+
+  if (!Object.values(job.sources).some((x) => x.status === "running")) job.status = "done";
+  await store.setKv(jobKey(slug), job);
+  await loadMentions(); // analyse what came in
+  return job;
+}
+
+export async function switchBrand(slug: string): Promise<boolean> {
+  const profile = await store.getProfile(slug);
+  if (!profile) return false;
+  await store.saveSettings(profile);
+  return true;
 }
 
 export async function getSummary(filters: MentionFilters, scopeLabel: string, force = false): Promise<Summary> {
@@ -110,7 +220,10 @@ export async function getMeta() {
   const settings = await store.getSettings();
   return {
     aiEnabled,
+    apifyEnabled,
     storageMode,
+    brands: await store.listBrands(),
+    job: await store.getKv<SearchJob>(jobKey(brandSlug(settings.brand))),
     lastRefresh: await store.getKv<string>(`lastRefresh:${brandSlug(settings.brand)}`),
     aiError: aiEnabled ? await store.getKv<AiError>("aiError") : null,
   };

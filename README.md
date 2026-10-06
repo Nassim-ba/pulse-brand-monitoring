@@ -6,17 +6,21 @@ Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group.
 
 ## Funktionen
 
+- **Markensuche** direkt in der oberen Leiste. Für neue Marken erstellt Claude automatisch ein Suchprofil (Suchbegriffe, Ausschlussbegriffe, Hashtags, Kontext). Bereits gesuchte Marken lassen sich schnell wechseln.
+- **Social Media und Google** über Apify: Instagram-Posts zu Hashtags, TikTok-Videos und organische Google-Ergebnisse, jeweils mit Reichweite und Engagement. Dazu Google News, Bing News und Hacker News.
+- **Reichweite und Engagement**: Top-Beiträge nach Reichweite, Interaktionen pro Plattform, Kritik mit großer Reichweite wird dringlicher eingestuft.
 - **Relevanz, Stimmung und Thema** für jede Erwähnung, inklusive Begründung. Verwechslungen (Autohaus ATZ, Altersteilzeit, Automobiltechnische Zeitschrift) erkennt die KI und sortiert sie aus.
 - **Handlungsbedarf** mit Dringlichkeit, Begründung, empfohlener Maßnahme und Antwortvorschlag. Beiträge lassen sich als erledigt markieren.
 - **KI-Lagebericht** für jeden Zeitraum und jede Filterauswahl.
-- **Filter und Suche** nach Stimmung, Thema, Quelle, Zeitraum und Handlungsbedarf. Filter stehen in der URL und lassen sich teilen.
+- **Filter für die gesamte Auswertung** nach Zeitraum, Plattform, Stimmung, Thema, Relevanz und Handlungsbedarf. Kennzahlen, Diagramme und Lagebericht rechnen mit der Auswahl. Filter stehen in der URL und lassen sich teilen.
 - **Links zur Originalquelle** bei jeder Erwähnung.
 - **Material Design 3**, responsiv mit Navigation Rail am Desktop und Navigation Bar am Smartphone, helles und dunkles Design.
 
 ## Architektur
 
 ```
-Live-Quellen (Google News, Bing News, Hacker News) ─┐
+Apify (Instagram, TikTok, Google Suche), asynchron ─┐
+Live-Feeds (Google News, Bing News, Hacker News) ───┤
 Demo-Datensatz (synthetisch, gekennzeichnet) ───────┤
                                                     ▼
                           Next.js API (Vercel Functions)
@@ -32,6 +36,8 @@ Demo-Datensatz (synthetisch, gekennzeichnet) ───────┤
 - Jede Erwähnung wird **einmal** analysiert und gespeichert. Seitenaufrufe kosten keine KI-Anfragen.
 - Analysen laufen in Batches von 12 Erwähnungen, vier Batches parallel.
 - Claude antwortet über **Structured Outputs** mit festem Schema, dadurch ist jede Antwort maschinenlesbar.
+- Apify-Läufe dauern 30 bis 120 Sekunden. Die Suche startet sie asynchron, die Oberfläche fragt den Fortschritt ab und analysiert neue Beiträge, sobald sie da sind.
+- Kostenschutz: höchstens 20 Ergebnisse pro Quelle, Kostendeckel pro Lauf, Ergebnisse 10 Minuten pro Marke wiederverwendet, Tageslimit für Suchen.
 - Fällt die KI aus oder fehlt der Schlüssel, übernimmt eine regelbasierte Analyse. Die Oberfläche zeigt an, welche Methode verwendet wurde.
 
 ## Lokal starten
@@ -48,7 +54,7 @@ Next.js 16, React 19, TypeScript, MUI 9 mit eigenem Material-3-Theme, MUI X Char
 
 ## Ausblick
 
-- Lizenzierte Quellen anbinden (Social-Listening-APIs, Bewertungsportale)
+- Weitere Quellen (YouTube, Bewertungsportale, offizielle Social-Listening-APIs)
 - Benachrichtigungen per E-Mail oder Slack bei hoher Dringlichkeit
 - Mehrere Marken und Wettbewerbsvergleich
 - Login und Rollen für Teams

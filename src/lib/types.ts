@@ -36,6 +36,14 @@ export interface Analysis {
   analyzedAt: string;
 }
 
+export interface Metrics {
+  likes?: number;
+  comments?: number;
+  views?: number;
+  shares?: number;
+  followers?: number; // author's audience
+}
+
 export interface RawMention {
   id: string;
   brand: string;
@@ -48,6 +56,7 @@ export interface RawMention {
   author: string | null;
   publishedAt: string; // ISO
   isDemo: boolean;
+  metrics?: Metrics | null;
 }
 
 export interface Mention extends RawMention {
@@ -60,13 +69,28 @@ export interface Settings {
   brand: string;
   keywords: string[];
   excludeKeywords: string[];
+  hashtags: string[];
   context: string;
   sources: {
     googleNews: boolean;
     bingNews: boolean;
     hackerNews: boolean;
+    googleSearch: boolean;
+    instagram: boolean;
+    tiktok: boolean;
   };
   demoData: boolean;
+}
+
+export type SourceRunStatus = "running" | "done" | "error" | "skipped";
+
+export interface SearchJob {
+  id: string;
+  brand: string; // slug
+  brandName: string;
+  startedAt: string;
+  status: "running" | "done";
+  sources: Record<string, { label: string; status: SourceRunStatus; runId?: string; datasetId?: string; count?: number; note?: string }>;
 }
 
 export interface Summary {
@@ -84,7 +108,7 @@ export interface MentionFilters {
   sentiments?: Sentiment[];
   topics?: Topic[];
   sources?: string[];
-  minRelevance?: number;
+  minRelevance?: number; // 0 shows everything incl. filtered-out mentions
   range?: "7d" | "30d" | "90d" | "all";
   actionOnly?: boolean;
   includeIrrelevant?: boolean;

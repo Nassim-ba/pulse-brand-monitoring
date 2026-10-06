@@ -170,3 +170,9 @@ export function SectionTitle({ children, action }: { children: React.ReactNode; 
     </Box>
   );
 }
+
+const compactFormat = new Intl.NumberFormat("de-DE", { notation: "compact", maximumFractionDigits: 1 });
+
+export function compact(n: number): string {
+  return compactFormat.format(n);
+}

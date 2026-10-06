@@ -52,3 +52,19 @@ export function brandSlug(brand: string): string {
       .replace(/^-|-$/g, "") || "brand"
   );
 }
+
+/** Rough audience estimate: views if known, otherwise interactions or author followers. */
+export function reach(m: Mention): number {
+  const x = m.metrics;
+  if (!x) return 0;
+  return x.views ?? Math.max((x.likes ?? 0) + (x.comments ?? 0) * 2 + (x.shares ?? 0) * 3, x.followers ?? 0);
+}
+
+export function interactions(m: Mention): number {
+  const x = m.metrics;
+  return x ? (x.likes ?? 0) + (x.comments ?? 0) + (x.shares ?? 0) : 0;
+}
+
+export function byReach(a: Mention, b: Mention): number {
+  return reach(b) - reach(a) || byDate(a, b);
+}

@@ -7,9 +7,11 @@ import Tooltip from "@mui/material/Tooltip";
 import OpenInNew from "@mui/icons-material/OpenInNew";
 import PriorityHigh from "@mui/icons-material/PriorityHigh";
 import CheckCircle from "@mui/icons-material/CheckCircle";
+import Visibility from "@mui/icons-material/VisibilityOutlined";
+import FavoriteBorder from "@mui/icons-material/FavoriteBorder";
 import type { Mention } from "@/lib/types";
 import { useData } from "./DataProvider";
-import { RelevanceMeter, SentimentTag, SourceAvatar, Tag, TopicTag, relativeTime, UrgencyTag } from "./bits";
+import { compact, RelevanceMeter, SentimentTag, SourceAvatar, Tag, TopicTag, relativeTime, UrgencyTag } from "./bits";
 
 export function MentionCard({ mention, showAction = false }: { mention: Mention; showAction?: boolean }) {
   const { openMention } = useData();
@@ -76,6 +78,11 @@ export function MentionCard({ mention, showAction = false }: { mention: Mention;
                   <SentimentTag sentiment={a.sentiment} />
                   <TopicTag topic={a.topic} />
                   {mention.isDemo ? <Tag outlined>Demo</Tag> : null}
+                  {mention.metrics?.views != null ? (
+                    <Tag icon={<Visibility />}>{compact(mention.metrics.views)}</Tag>
+                  ) : mention.metrics?.likes != null ? (
+                    <Tag icon={<FavoriteBorder />}>{compact(mention.metrics.likes)}</Tag>
+                  ) : null}
                   <Box sx={{ ml: "auto" }}>
                     <RelevanceMeter value={a.relevance} compact />
                   </Box>
