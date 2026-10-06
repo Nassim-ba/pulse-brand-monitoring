@@ -72,7 +72,7 @@ Handlungsbedarf: Sei streng. Markiere nur Beiträge, bei denen das Team konkret 
 Kein Handlungsbedarf bei Lob, Erfahrungsberichten ohne Frage, Eigenbeiträgen von Mitarbeitenden, Branchenberichten und neutraler Berichterstattung, auch wenn eine Reaktion nett wäre. Irrelevante Beiträge haben nie Handlungsbedarf. In einem typischen Datensatz trifft Handlungsbedarf auf höchstens ein Drittel der Beiträge zu.
 Dringlichkeit: high bei Reputationsrisiko, Falschinformation, Datenschutz- oder Rechtsthemen und Kritik mit Reichweite. medium bei Beschwerden und offenen Fragen an die Marke. low bei Geschäftschancen ohne Zeitdruck. none ohne Handlungsbedarf.
 
-Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprache des Beitrags, keine leeren Floskeln, keine Gedankenstriche. Bei Bewertungen und Social Media duzen oder siezen wie der Verfasser.
+Antwortvorschläge: freundlich, professionell, lösungsorientiert, in der Sprache des Beitrags, keine leeren Floskeln, keine Gedankenstriche, keine Platzhalter wie [Name]. Unterschreibe nicht mit einem Namen. Bei Bewertungen und Social Media duzen oder siezen wie der Verfasser.
 
 Alle Texte auf Deutsch. Gib für jede Eingabe genau ein Ergebnis zurück, in derselben Reihenfolge, mit derselben id und dem exakt übernommenen Titel. Bewerte jede Erwähnung nur anhand ihres eigenen Textes.`;
 }
@@ -90,6 +90,16 @@ function formatMention(m: RawMention, index: number): string {
     .filter(Boolean)
     .join("\n");
 }
+
+/** Removes dash-style asides and placeholder brackets the model sometimes produces. */
+const clean = (t: string | null) =>
+  t === null
+    ? null
+    : t
+        .replace(/\s*[–—]\s*/g, ", ")
+        .replace(/\s*\[[^\]]{1,30}\]/g, "")
+        .replace(/,\s*,/g, ",")
+        .trim();
 
 const clamp = (n: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, n));
 
@@ -114,16 +124,16 @@ async function analyzeBatch(batch: RawMention[], s: Settings): Promise<Map<strin
     const actionRequired = r.action_required && relevance >= 40;
     out.set(id, {
       relevance,
-      relevanceReason: r.relevance_reason,
+      relevanceReason: clean(r.relevance_reason)!,
       sentiment: r.sentiment,
       sentimentScore: clamp(r.sentiment_score, -1, 1),
       topic: r.topic,
       actionRequired,
       urgency: actionRequired ? (r.urgency === "none" ? "low" : r.urgency) : "none",
-      actionReason: actionRequired ? r.action_reason : null,
-      suggestedAction: actionRequired ? r.suggested_action : null,
-      suggestedReply: actionRequired ? r.suggested_reply : null,
-      summary: r.summary,
+      actionReason: actionRequired ? clean(r.action_reason) : null,
+      suggestedAction: actionRequired ? clean(r.suggested_action) : null,
+      suggestedReply: actionRequired ? clean(r.suggested_reply) : null,
+      summary: clean(r.summary)!,
       analyzedBy: "claude",
       analyzedAt: now,
     });
@@ -196,10 +206,10 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
     aiStatus.ok = Boolean(p);
     if (!p) throw new Error(`No parsed output (stop_reason: ${response.stop_reason})`);
     return {
-      headline: p.headline,
-      summary: p.summary,
-      keyPoints: p.key_points,
-      recommendations: p.recommendations,
+      headline: clean(p.headline)!,
+      summary: clean(p.summary)!,
+      keyPoints: p.key_points.map((x) => clean(x)!),
+      recommendations: p.recommendations.map((x) => clean(x)!),
       generatedBy: "claude",
       generatedAt: new Date().toISOString(),
       mentionCount: analyzed.length,
