@@ -7,6 +7,7 @@ interface Meta {
   aiEnabled: boolean;
   storageMode: "postgres" | "memory";
   lastRefresh: string | null;
+  aiError: { message: string; at: string } | null;
 }
 
 interface DataContextValue {

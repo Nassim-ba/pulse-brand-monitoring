@@ -13,6 +13,14 @@ const PARALLEL = 4;
 export const aiEnabled = Boolean(process.env.ANTHROPIC_API_KEY);
 const client = aiEnabled ? new Anthropic() : null;
 
+/** Last API error of this invocation, persisted by the service layer for diagnostics. */
+export const aiStatus: { lastError: string | null; ok: boolean } = { lastError: null, ok: false };
+
+function describeError(err: unknown): string {
+  if (err instanceof Anthropic.APIError) return `${err.status ?? ""} ${err.message}`.trim().slice(0, 300);
+  return err instanceof Error ? err.message.slice(0, 300) : String(err).slice(0, 300);
+}
+
 // ---------- Mention analysis ----------
 
 const AnalysisItem = z.object({
@@ -121,7 +129,9 @@ export async function analyzeMentions(items: RawMention[], s: Settings): Promise
         if (client) {
           try {
             analyzed = await analyzeBatch(batch, s);
+            aiStatus.ok = true;
           } catch (err) {
+            aiStatus.lastError = describeError(err);
             console.error("Claude analysis failed, using heuristic fallback:", err);
           }
         }
@@ -168,6 +178,7 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
       output_config: { format: zodOutputFormat(SummarySchema) },
     });
     const p = response.parsed_output;
+    aiStatus.ok = Boolean(p);
     if (!p) throw new Error(`No parsed output (stop_reason: ${response.stop_reason})`);
     return {
       headline: p.headline,
@@ -179,6 +190,7 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
       mentionCount: analyzed.length,
     };
   } catch (err) {
+    aiStatus.lastError = describeError(err);
     console.error("Claude summary failed, using heuristic fallback:", err);
     return heuristicSummary(analyzed, s.brand);
   }

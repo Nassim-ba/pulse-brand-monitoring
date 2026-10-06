@@ -176,6 +176,11 @@ export default function SettingsPage() {
                   ? "Claude (Anthropic) bewertet Relevanz, Stimmung, Thema und Handlungsbedarf und schreibt Antwortvorschläge und Lageberichte."
                   : "Kein API-Schlüssel hinterlegt. Pulse nutzt eine regelbasierte Analyse als Rückfallebene."}
               </Typography>
+              {meta?.aiError ? (
+                <Typography variant="body2" sx={{ color: "var(--md-error)", mt: 0.5, wordBreak: "break-word" }}>
+                  Letzter KI-Fehler ({new Date(meta.aiError.at).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}): {meta.aiError.message}
+                </Typography>
+              ) : null}
             </Box>
           </Box>
           <Box sx={{ display: "flex", gap: 1.5, alignItems: "flex-start" }}>
