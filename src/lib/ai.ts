@@ -11,7 +11,10 @@ const BATCH_SIZE = 12;
 const PARALLEL = 4;
 
 export const aiEnabled = Boolean(process.env.ANTHROPIC_API_KEY);
-const client = aiEnabled ? new Anthropic() : null;
+const workspaceId = process.env.ANTHROPIC_WORKSPACE_ID;
+const client = aiEnabled
+  ? new Anthropic(workspaceId ? { defaultHeaders: { "anthropic-workspace-id": workspaceId } } : {})
+  : null;
 
 /** Last API error of this invocation, persisted by the service layer for diagnostics. */
 export const aiStatus: { lastError: string | null; ok: boolean } = { lastError: null, ok: false };
