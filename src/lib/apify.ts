@@ -80,8 +80,8 @@ export const APIFY_SOURCES: ApifySource[] = [
       searchSection: "/video",
       shouldDownloadVideos: false,
       shouldDownloadCovers: false,
-      shouldDownloadSubtitles: false,
       shouldDownloadSlideshowImages: false,
+      shouldDownloadAvatars: false,
     }),
     map: (it, s) => {
       const url = str(it.webVideoUrl);
@@ -117,10 +117,9 @@ export const APIFY_SOURCES: ApifySource[] = [
     input: (s) => ({
       queries: `"${s.brand}"`,
       maxPagesPerQuery: 2,
-      resultsPerPage: 10,
       countryCode: "de",
       languageCode: "de",
-      mobileResults: false,
+      saveHtmlToKeyValueStore: false,
     }),
     // One dataset item per results page; organic results are expanded in mapPage().
     map: () => null,
@@ -171,7 +170,7 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
 
 export async function startRun(source: ApifySource, s: Settings): Promise<{ runId: string; datasetId: string }> {
   const { data } = await api<{ data: { id: string; defaultDatasetId: string } }>(
-    `/acts/${source.actor}/runs?timeout=240&memory=1024&maxTotalChargeUsd=${MAX_CHARGE_USD}`,
+    `/acts/${source.actor}/runs?timeout=240&maxTotalChargeUsd=${MAX_CHARGE_USD}`,
     { method: "POST", body: JSON.stringify(source.input(s)) },
   );
   return { runId: data.id, datasetId: data.defaultDatasetId };

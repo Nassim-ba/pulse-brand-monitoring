@@ -124,7 +124,8 @@ export async function startSearch(brandName?: string): Promise<SearchJob> {
           job.sources[src.key] = { label: src.label, status: "running", runId, datasetId };
         } catch (err) {
           console.error(`Apify start failed (${src.key}):`, err);
-          job.sources[src.key] = { label: src.label, status: "error", note: "Start fehlgeschlagen" };
+          const detail = err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 160) : "";
+          job.sources[src.key] = { label: src.label, status: "error", note: `Start fehlgeschlagen. ${detail}`.trim() };
         }
       }
     }),
