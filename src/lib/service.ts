@@ -88,6 +88,16 @@ export async function loadMentions({ background = false } = {}): Promise<{ setti
 
 // ---------- Brand search ----------
 
+/** Profiles from before logo support get the official name and domain filled in once. */
+async function backfillProfile(settings: Settings): Promise<Settings> {
+  if (settings.domain || settings.demoData) return settings;
+  const refreshed = await generateProfile(settings.brand);
+  await recordAiStatus();
+  return refreshed?.isBrand && brandSlug(refreshed.brand) === brandSlug(settings.brand)
+    ? { ...settings, brand: refreshed.brand, domain: refreshed.domain }
+    : settings;
+}
+
 export class LimitError extends Error {}
 export class NotBrandError extends Error {}
 
@@ -140,13 +150,8 @@ export async function startSearch(brandName?: string): Promise<SearchJob> {
     } else {
       settings = basicProfile(name);
     }
-  } else if (!settings.domain && !settings.demoData) {
-    // Profiles from before logo support get name and domain filled in once.
-    const refreshed = await generateProfile(settings.brand);
-    await recordAiStatus();
-    if (refreshed?.isBrand && brandSlug(refreshed.brand) === brandSlug(settings.brand)) {
-      settings = { ...settings, brand: refreshed.brand, domain: refreshed.domain };
-    }
+  } else {
+    settings = await backfillProfile(settings);
   }
   await store.saveSettings(settings);
   const slug = brandSlug(settings.brand);
@@ -259,7 +264,7 @@ export async function pollSearch(): Promise<SearchJob | null> {
 export async function switchBrand(slug: string): Promise<boolean> {
   const profile = await store.getProfile(slug);
   if (!profile) return false;
-  await store.saveSettings(profile);
+  await store.saveSettings(await backfillProfile(profile));
   return true;
 }
 
