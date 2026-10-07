@@ -9,24 +9,27 @@ export async function downloadElementAsPdf(el: HTMLElement, filename: string): P
   const [{ default: html2canvas }, { jsPDF }] = await Promise.all([import("html2canvas-pro"), import("jspdf")]);
 
   const scale = 2;
-  let blocks: { top: number; bottom: number }[] = [];
 
-  // Render a desktop-width A4 layout regardless of the current screen size.
-  const canvas = await html2canvas(el, {
-    scale,
-    backgroundColor: "#ffffff",
-    useCORS: true,
-    logging: false,
-    windowWidth: 1200,
-    onclone: (_doc, clone) => {
-      Object.assign(clone.style, { width: "794px", maxWidth: "794px", borderRadius: "0", boxShadow: "none", padding: "28px 32px" });
-      const origin = clone.getBoundingClientRect().top;
-      blocks = [...clone.querySelectorAll<HTMLElement>("[data-pdf-block]")].map((b) => {
-        const r = b.getBoundingClientRect();
-        return { top: (r.top - origin) * scale, bottom: (r.bottom - origin) * scale };
-      });
-    },
-  });
+  // Lay the element out at a fixed A4 width before measuring, so canvas size,
+  // block positions and content all match regardless of the current screen.
+  const previous = el.getAttribute("style") ?? "";
+  el.classList.add("pdf-capture");
+  Object.assign(el.style, { width: "794px", maxWidth: "794px", boxSizing: "border-box", padding: "28px 32px", borderRadius: "0", boxShadow: "none" });
+  await new Promise((r) => setTimeout(r, 50)); // reading layout below forces a reflow anyway
+
+  let canvas: HTMLCanvasElement;
+  let blocks: { top: number; bottom: number }[];
+  try {
+    const origin = el.getBoundingClientRect().top;
+    blocks = [...el.querySelectorAll<HTMLElement>("[data-pdf-block]")].map((b) => {
+      const r = b.getBoundingClientRect();
+      return { top: (r.top - origin) * scale, bottom: (r.bottom - origin) * scale };
+    });
+    canvas = await html2canvas(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
+  } finally {
+    el.classList.remove("pdf-capture");
+    el.setAttribute("style", previous);
+  }
 
   const pdf = new jsPDF({ unit: "mm", format: "a4", compress: true });
   const margin = 10;

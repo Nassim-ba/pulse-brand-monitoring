@@ -145,6 +145,8 @@ function ReportView() {
           .two-col { grid-template-columns: 1fr !important; }
           .sheet { padding: 20px 16px !important; }
         }
+        .pdf-capture .two-col { grid-template-columns: 1fr 1fr !important; }
+        .sheet.pdf-capture { padding: 28px 32px !important; }
         @media print {
           html, body { background: #fff !important; }
           .no-print { display: none !important; }
