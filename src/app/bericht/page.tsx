@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useData } from "@/components/DataProvider";
@@ -9,6 +9,7 @@ import { useFilters } from "@/hooks/useFilters";
 import { applyFilters, byReach, byUrgency, reach } from "@/lib/filters";
 import { RELEVANCE_THRESHOLD, SENTIMENT_LABELS, TOPIC_LABELS, URGENCY_LABELS } from "@/lib/labels";
 import { SENTIMENTS, TOPICS, type Summary } from "@/lib/types";
+import { downloadElementAsPdf } from "@/lib/pdf";
 
 /*
  * Print-optimised management report. Uses a fixed light palette so the PDF
@@ -32,7 +33,7 @@ const nf = new Intl.NumberFormat("de-DE");
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <section style={{ marginTop: 22, breakInside: "avoid" }}>
+    <section data-pdf-block style={{ marginTop: 22, breakInside: "avoid" }}>
       <h2 style={{ fontSize: 13, fontWeight: 700, letterSpacing: 0.6, textTransform: "uppercase", color: C.primary, margin: "0 0 8px" }}>{title}</h2>
       {children}
     </section>
@@ -102,6 +103,33 @@ function ReportView() {
   }, [loading, pending, filterKey, range]);
 
   const ready = !loading && pending === 0 && summaryState !== "loading";
+  const sheetRef = useRef<HTMLElement>(null);
+  const [exporting, setExporting] = useState(false);
+  const autoDownload = useRef(params.get("download") === "1");
+
+  const download = useCallback(async () => {
+    if (!sheetRef.current || !settings) return;
+    setExporting(true);
+    try {
+      const name = settings.brand.replace(/[^\p{L}\p{N}]+/gu, "-").replace(/^-|-$/g, "");
+      await downloadElementAsPdf(sheetRef.current, `Pulse-Report_${name}_${now.toISOString().slice(0, 10)}.pdf`);
+    } finally {
+      setExporting(false);
+    }
+  }, [settings, now]);
+
+  // Opened via "Report als PDF": download as soon as the report is complete.
+  useEffect(() => {
+    if (ready && autoDownload.current) {
+      autoDownload.current = false;
+      // Give logos and fonts a moment to render.
+      const t = setTimeout(download, 600);
+      return () => clearTimeout(t);
+    }
+  }, [ready, download]);
+
+  const backParams = new URLSearchParams(params.toString());
+  backParams.delete("download");
   const filterNotes = [
     filters.sources?.length ? `Plattformen: ${filters.sources.length} ausgewählt` : null,
     filters.sentiments?.length ? `Stimmung: ${filters.sentiments.map((s) => SENTIMENT_LABELS[s]).join(", ")}` : null,
@@ -127,30 +155,39 @@ function ReportView() {
       `}</style>
 
       <div className="no-print" style={{ maxWidth: 820, margin: "0 auto 12px", display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-        <Link href={params.toString() ? `/?${params}` : "/"} style={{ color: C.primary, fontWeight: 500, fontSize: 14, textDecoration: "none", marginRight: "auto" }}>
+        <Link href={backParams.toString() ? `/?${backParams}` : "/"} style={{ color: C.primary, fontWeight: 500, fontSize: 14, textDecoration: "none", marginRight: "auto" }}>
           ← Zurück zu Pulse
         </Link>
-        <span style={{ fontSize: 13, color: C.muted }}>{ready ? "Bericht ist bereit." : "Bericht wird erstellt …"}</span>
+        <span style={{ fontSize: 13, color: C.muted }}>
+          {!ready ? "Bericht wird erstellt …" : exporting ? "PDF wird erzeugt …" : "Bericht ist bereit."}
+        </span>
         <button
           onClick={() => window.print()}
           disabled={!ready}
+          style={{ border: `1px solid ${C.neutral}`, borderRadius: 100, padding: "9px 18px", fontSize: 14, fontWeight: 500, background: "transparent", color: C.primary, cursor: ready ? "pointer" : "default" }}
+        >
+          Drucken
+        </button>
+        <button
+          onClick={download}
+          disabled={!ready || exporting}
           style={{
             border: 0,
             borderRadius: 100,
             padding: "10px 22px",
             fontSize: 14,
             fontWeight: 500,
-            cursor: ready ? "pointer" : "default",
-            background: ready ? C.primary : "#c4c6d0",
+            cursor: ready && !exporting ? "pointer" : "default",
+            background: ready && !exporting ? C.primary : "#c4c6d0",
             color: "#fff",
           }}
         >
-          Als PDF speichern
+          {exporting ? "Wird erzeugt …" : "PDF herunterladen"}
         </button>
       </div>
 
-      <article className="sheet" style={{ maxWidth: 820, margin: "0 auto", background: "#fff", borderRadius: 12, padding: "28px 32px", boxShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
-        <header style={{ display: "flex", alignItems: "center", gap: 14, borderBottom: `2px solid ${C.primary}`, paddingBottom: 14 }}>
+      <article ref={sheetRef} className="sheet" style={{ maxWidth: 820, margin: "0 auto", background: "#fff", borderRadius: 12, padding: "28px 32px", boxShadow: "0 2px 10px rgba(0,0,0,.12)" }}>
+        <header data-pdf-block style={{ display: "flex", alignItems: "center", gap: 14, borderBottom: `2px solid ${C.primary}`, paddingBottom: 14 }}>
           {settings ? <BrandLogo name={settings.brand} domain={settings.domain} size={48} /> : null}
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 11, color: C.muted, letterSpacing: 0.6, textTransform: "uppercase" }}>Brand-Monitoring-Report</div>
@@ -262,7 +299,7 @@ function ReportView() {
               </thead>
               <tbody>
                 {data.actions.slice(0, 10).map((m) => (
-                  <tr key={m.id} style={{ verticalAlign: "top", breakInside: "avoid" }}>
+                  <tr key={m.id} data-pdf-block style={{ verticalAlign: "top", breakInside: "avoid" }}>
                     <td style={{ padding: "6px", borderBottom: `1px solid ${C.line}`, fontWeight: 600, color: m.analysis?.urgency === "high" ? C.negative : C.ink }}>
                       {URGENCY_LABELS[m.analysis!.urgency]}
                     </td>
@@ -288,7 +325,7 @@ function ReportView() {
         <Section title="Reichweitenstärkste Beiträge">
           {data.top.length ? (
             data.top.map((m, i) => (
-              <div key={m.id} style={{ display: "flex", gap: 10, padding: "6px 0", borderBottom: `1px solid ${C.line}`, fontSize: 12, breakInside: "avoid" }}>
+              <div key={m.id} data-pdf-block style={{ display: "flex", gap: 10, padding: "6px 0", borderBottom: `1px solid ${C.line}`, fontSize: 12, breakInside: "avoid" }}>
                 <span style={{ fontWeight: 700, color: C.primary, width: 14 }}>{i + 1}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <a href={m.url} style={{ color: C.ink, textDecoration: "none" }}>
@@ -307,7 +344,7 @@ function ReportView() {
           )}
         </Section>
 
-        <footer style={{ marginTop: 24, paddingTop: 10, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, display: "flex", justifyContent: "space-between", gap: 8 }}>
+        <footer data-pdf-block style={{ marginTop: 24, paddingTop: 10, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, display: "flex", justifyContent: "space-between", gap: 8 }}>
           <span>Erstellt mit Pulse · KI-Analyse durch Claude (Anthropic) · Daten aus News, Google, Instagram und TikTok</span>
           <span>{data.analysed.length} analysierte Erwähnungen</span>
         </footer>

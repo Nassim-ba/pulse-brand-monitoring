@@ -8,7 +8,7 @@ import { useData } from "./DataProvider";
 /** Logo of the monitored brand via its domain's icon, with an initials fallback. */
 export function BrandLogo({ name, domain, size = 40 }: { name: string; domain?: string; size?: number }) {
   const [failed, setFailed] = useState<string | null>(null);
-  const src = domain ? `https://www.google.com/s2/favicons?domain=${encodeURIComponent(domain)}&sz=128` : null;
+  const src = domain ? `/api/logo?domain=${encodeURIComponent(domain)}` : null;
   const initials = name
     .split(/\s+/)
     .slice(0, 2)

@@ -137,7 +137,7 @@ function ReportButton() {
   const params = useSearchParams();
   const qs = params.toString();
   return (
-    <Button variant="outlined" startIcon={<PictureAsPdf />} component={Link} href={qs ? `/bericht?${qs}` : "/bericht"}>
+    <Button variant="outlined" startIcon={<PictureAsPdf />} component={Link} href={qs ? `/bericht?${qs}&download=1` : "/bericht?download=1"}>
       Report als PDF
     </Button>
   );
