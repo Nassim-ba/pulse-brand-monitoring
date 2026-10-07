@@ -15,9 +15,22 @@ import { useData } from "./DataProvider";
 
 /** Shows the progress of the running brand search per source. */
 export function SearchProgress() {
-  const { job, pending } = useData();
+  const { job, pending, preparing } = useData();
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [openedAt] = useState(() => Date.now());
+  if (preparing) {
+    return (
+      <Box sx={{ borderRadius: 4, bgcolor: "var(--md-surface-container)", overflow: "hidden", mb: 2 }}>
+        <LinearProgress />
+        <Box sx={{ p: 2 }}>
+          <Typography variant="subtitle2">Suche nach „{preparing}“ wird vorbereitet</Typography>
+          <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
+            Claude prüft die Marke und erstellt das Suchprofil, danach starten News, Google, Instagram und TikTok.
+          </Typography>
+        </Box>
+      </Box>
+    );
+  }
   if ((!job || dismissed === job.id) && pending > 0) {
     return (
       <Box sx={{ borderRadius: 4, bgcolor: "var(--md-surface-container)", overflow: "hidden", mb: 2 }}>

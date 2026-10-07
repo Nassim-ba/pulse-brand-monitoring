@@ -27,6 +27,8 @@ interface DataContextValue {
   job: SearchJob | null;
   /** Mentions still waiting for their analysis. */
   pending: number;
+  /** Brand whose search is being prepared (validation, profile, news). */
+  preparing: string | null;
   setStatus: (id: string, status: MentionStatus) => Promise<void>;
   saveSettings: (s: Settings) => Promise<boolean>;
   toast: (message: string) => void;
@@ -52,6 +54,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [message, setMessage] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [job, setJob] = useState<SearchJob | null>(null);
+  const [preparing, setPreparing] = useState<string | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<() => void>(() => {});
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -130,6 +133,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const runSearch = useCallback(
     async (brand?: string) => {
       setRefreshing(true);
+      setPreparing(brand ?? settings?.brand ?? null);
       if (pollTimer.current) clearTimeout(pollTimer.current);
       pollTimer.current = null;
       try {
@@ -148,9 +152,11 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       } catch (e) {
         setMessage(e instanceof Error ? e.message : "Suche fehlgeschlagen");
         setRefreshing(false);
+      } finally {
+        setPreparing(null);
       }
     },
-    [reload, poll],
+    [reload, poll, settings?.brand],
   );
 
   const refresh = useCallback(() => runSearch(), [runSearch]);
@@ -216,13 +222,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       switchBrand,
       job,
       pending,
+      preparing,
       setStatus,
       saveSettings,
       toast: setMessage,
       selectedId,
       openMention: setSelectedId,
     }),
-    [mentions, settings, meta, loading, refreshing, error, reload, refresh, search, switchBrand, job, pending, setStatus, saveSettings, selectedId],
+    [mentions, settings, meta, loading, refreshing, error, reload, refresh, search, switchBrand, job, pending, preparing, setStatus, saveSettings, selectedId],
   );
 
   return (
