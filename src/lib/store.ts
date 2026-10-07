@@ -177,7 +177,7 @@ function withDefaults(p: Partial<Settings>): Settings {
     domain: isDefaultBrand ? DEFAULT_SETTINGS.domain : undefined,
     demoData: isDefaultBrand ? DEFAULT_SETTINGS.demoData : false,
     ...p,
-    ...(!isDefaultBrand && p.domain === DEFAULT_SETTINGS.domain ? { domain: undefined } : {}),
+    ...(!isDefaultBrand ? { demoData: false, ...(p.domain === DEFAULT_SETTINGS.domain ? { domain: undefined } : {}) } : {}),
     hashtags: p.hashtags ?? (p.brand && p.brand !== DEFAULT_SETTINGS.brand ? [p.brand.toLowerCase().replace(/[^a-z0-9]/g, "")] : DEFAULT_SETTINGS.hashtags),
     sources: { ...DEFAULT_SETTINGS.sources, ...(p.sources ?? {}) },
   };
