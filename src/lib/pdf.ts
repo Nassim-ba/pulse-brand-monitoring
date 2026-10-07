@@ -18,12 +18,12 @@ export async function downloadElementAsPdf(el: HTMLElement, filename: string): P
   await new Promise((r) => setTimeout(r, 50)); // reading layout below forces a reflow anyway
 
   let canvas: HTMLCanvasElement;
-  let blocks: { top: number; bottom: number }[];
+  let blocks: { top: number; bottom: number; section: boolean }[];
   try {
     const origin = el.getBoundingClientRect().top;
     blocks = [...el.querySelectorAll<HTMLElement>("[data-pdf-block]")].map((b) => {
       const r = b.getBoundingClientRect();
-      return { top: (r.top - origin) * scale, bottom: (r.bottom - origin) * scale };
+      return { top: (r.top - origin) * scale, bottom: (r.bottom - origin) * scale, section: b.tagName === "SECTION" };
     });
     canvas = await html2canvas(el, { scale, backgroundColor: "#ffffff", useCORS: true, logging: false });
   } finally {
@@ -48,6 +48,10 @@ export async function downloadElementAsPdf(el: HTMLElement, filename: string): P
         .filter((b) => b.top < end && b.bottom > end && b.top > y + pagePx * 0.35)
         .sort((a, b) => b.top - a.top)[0];
       if (cut) end = Math.floor(cut.top);
+      // Keep a section heading with its content: if the section only started
+      // shortly before the break, move the whole section to the next page.
+      const head = blocks.find((b) => b.section && b.top < end && end - b.top < 170 * scale && b.top > y + pagePx * 0.35);
+      if (head) end = Math.floor(head.top);
     }
     const slice = document.createElement("canvas");
     slice.width = canvas.width;
