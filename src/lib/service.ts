@@ -4,6 +4,7 @@ import { aiEnabled, aiStatus, analyzeMentions, askAboutMentions, compareBrands, 
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
 import { validateBrandInput } from "./validate";
+import { getCurrentUser } from "./auth";
 import { applyFilters, brandSlug, byDate, byReach, byRelevance, interactions, reach } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
@@ -11,7 +12,18 @@ import { SENTIMENTS, TOPICS, type Analysis, type BrandStats, type CompetitorInsi
 import { TOPIC_LABELS } from "./labels";
 
 const SEARCH_COOLDOWN_MS = 10 * 60_000; // per brand
-const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget of the public app
+const DAILY_SEARCH_LIMIT = 60; // all users together, protects the Apify/Claude budget
+const DAILY_SEARCH_LIMIT_PER_USER = 20;
+
+/** Counts one use against a per-user and a global daily limit. */
+async function consumeDaily(kind: "searches" | "questions", perUser: number, total: number, message: string) {
+  const day = new Date().toISOString().slice(0, 10);
+  const globalKey = `${kind}:${day}`;
+  const ownKey = store.userKey(`${kind}:${day}`);
+  const [all, own] = await Promise.all([store.getKv<number>(globalKey), store.getKv<number>(ownKey)]);
+  if ((all ?? 0) >= total || (own ?? 0) >= perUser) throw new LimitError(message);
+  await Promise.all([store.setKv(globalKey, (all ?? 0) + 1), store.setKv(ownKey, (own ?? 0) + 1)]);
+}
 
 export class CooldownError extends Error {}
 
@@ -160,10 +172,7 @@ export async function startSearch(brandName?: string, { activate = true }: { act
     return existing;
   }
 
-  const day = new Date().toISOString().slice(0, 10);
-  const used = (await store.getKv<number>(`searches:${day}`)) ?? 0;
-  if (used >= DAILY_SEARCH_LIMIT) throw new LimitError("Tageslimit für Suchen erreicht. Bitte morgen erneut versuchen.");
-  await store.setKv(`searches:${day}`, used + 1);
+  await consumeDaily("searches", DAILY_SEARCH_LIMIT_PER_USER, DAILY_SEARCH_LIMIT, "Tageslimit für Suchen erreicht. Bitte morgen erneut versuchen.");
 
   const job: SearchJob = {
     id: `${slug}-${Date.now()}`,
@@ -300,6 +309,7 @@ export async function getMeta() {
     job: await store.getKv<SearchJob>(jobKey(brandSlug(settings.brand))),
     lastRefresh: await store.getKv<string>(`lastRefresh:${brandSlug(settings.brand)}`),
     aiError: aiEnabled ? await store.getKv<AiError>("aiError") : null,
+    user: await getCurrentUser(),
   };
 }
 
@@ -316,10 +326,7 @@ export interface AskResult {
 
 export async function ask(question: string, history: AskTurn[], filters: MentionFilters): Promise<AskResult> {
   if (!aiEnabled) throw new LimitError("Frag Pulse braucht die KI-Anbindung, die gerade nicht aktiv ist.");
-  const day = new Date().toISOString().slice(0, 10);
-  const used = (await store.getKv<number>(`questions:${day}`)) ?? 0;
-  if (used >= DAILY_QUESTION_LIMIT) throw new LimitError("Tageslimit für Fragen erreicht. Bitte morgen erneut versuchen.");
-  await store.setKv(`questions:${day}`, used + 1);
+  await consumeDaily("questions", 60, DAILY_QUESTION_LIMIT, "Tageslimit für Fragen erreicht. Bitte morgen erneut versuchen.");
 
   const { settings, mentions } = await loadMentions({ background: true });
   // Most relevant first, then newest, so the context stays within budget.
@@ -358,7 +365,7 @@ const MAX_COMPETITORS = 3;
 async function comparisonBrands(): Promise<{ own: Settings; competitors: Settings[] }> {
   const own = await store.getSettings();
   const competitors = (
-    await Promise.all((own.competitors ?? []).map((slug) => store.getProfile(slug)))
+    await Promise.all((await store.getCompetitors(brandSlug(own.brand))).map((slug) => store.getProfile(slug)))
   ).filter((p): p is Settings => Boolean(p));
   return { own, competitors };
 }
@@ -375,18 +382,19 @@ export async function suggestCompetitors(): Promise<string[]> {
 
 export async function addCompetitor(name: string): Promise<void> {
   const own = await store.getSettings();
-  const list = own.competitors ?? [];
+  const list = await store.getCompetitors(brandSlug(own.brand));
   if (list.length >= MAX_COMPETITORS) throw new LimitError(`Es lassen sich höchstens ${MAX_COMPETITORS} Wettbewerber vergleichen.`);
   const profile = await resolveProfile(name);
   const slug = brandSlug(profile.brand);
   if (slug === brandSlug(own.brand)) throw new NotBrandError("Das ist die überwachte Marke selbst.");
   await store.saveProfile(profile);
-  if (!list.includes(slug)) await store.saveSettings({ ...own, competitors: [...list, slug] });
+  if (!list.includes(slug)) await store.setCompetitors(brandSlug(own.brand), [...list, slug]);
 }
 
 export async function removeCompetitor(slug: string): Promise<void> {
   const own = await store.getSettings();
-  await store.saveSettings({ ...own, competitors: (own.competitors ?? []).filter((s) => s !== slug) });
+  const list = await store.getCompetitors(brandSlug(own.brand));
+  await store.setCompetitors(brandSlug(own.brand), list.filter((s) => s !== slug));
 }
 
 /** Starts (or reuses) searches for the monitored brand and all competitors. */

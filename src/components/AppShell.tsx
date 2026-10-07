@@ -31,6 +31,7 @@ import { PulseMark } from "./PulseLogo";
 import { BrandBadge } from "./BrandBadge";
 import { BrandSearch } from "./BrandSearch";
 import { SearchProgress } from "./SearchProgress";
+import { AccountMenu } from "./AccountMenu";
 
 const NAV = [
   { href: "/", label: "Übersicht", icon: DashboardOutlined, activeIcon: Dashboard },
@@ -190,8 +191,8 @@ function BarItems({ qs }: { qs: string }) {
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { refresh, refreshing } = useData();
   const pathname = usePathname();
-  // The printable report renders without the app chrome.
-  if (pathname.startsWith("/bericht")) return <>{children}</>;
+  // The printable report and the login page render without the app chrome.
+  if (pathname.startsWith("/bericht") || pathname === "/login") return <>{children}</>;
 
   // Source preview pages render without the app chrome.
 
@@ -280,6 +281,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Tooltip>
           </Box>
           <ThemeToggle />
+          <AccountMenu />
         </Box>
 
         <Box component="main" sx={{ flex: 1, px: { xs: 2, md: 3 }, pt: { xs: 2, md: 1 }, pb: { xs: 13, md: 4 }, maxWidth: 1440, width: "100%", mx: "auto" }}>

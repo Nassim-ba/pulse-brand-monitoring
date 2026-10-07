@@ -1,9 +1,10 @@
+import { withUser } from "@/lib/context";
 import { getSummary } from "@/lib/service";
 import type { MentionFilters } from "@/lib/types";
 
 export const maxDuration = 120;
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as {
     filters?: MentionFilters;
     scopeLabel?: string;
@@ -17,3 +18,5 @@ export async function POST(request: Request) {
     return Response.json({ error: "Zusammenfassung fehlgeschlagen." }, { status: 500 });
   }
 }
+
+export const POST = (...args: Parameters<typeof handlePOST>) => withUser(() => handlePOST(...args));

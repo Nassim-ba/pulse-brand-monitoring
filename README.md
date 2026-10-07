@@ -19,6 +19,12 @@ Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group. Pulse
 - **Links zur Originalquelle** bei jeder Erwähnung.
 - **Material Design 3**, responsiv mit Navigation Rail am Desktop und Navigation Bar am Smartphone, helles und dunkles Design.
 
+## Konten
+
+- Anmeldung mit E-Mail und Passwort (scrypt), Sitzung als signiertes Cookie, Konten in Postgres
+- Hybrid-Modell: Suchergebnisse, Analysen und Suchprofile einer Marke werden geteilt, damit jede Marke nur einmal Kosten verursacht. Aktive Marke, Markenliste, Wettbewerber, Bearbeitungsstatus und Tageslimits sind pro Person.
+- `AUTH_SECRET` signiert die Sitzungen (ohne Variable wird ein Schlüssel aus den übrigen Secrets abgeleitet)
+
 ## Architektur
 
 ```

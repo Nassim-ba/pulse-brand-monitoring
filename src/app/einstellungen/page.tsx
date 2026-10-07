@@ -118,6 +118,10 @@ export default function SettingsPage() {
 
       <Card>
         <SectionTitle>Marke</SectionTitle>
+        <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)", mt: -1, mb: 2 }}>
+          Das Suchprofil einer Marke teilen sich alle, die sie überwachen. So wird jede Marke nur einmal gesucht und analysiert. Deine aktive Marke,
+          Wettbewerber und Bearbeitungsstände bleiben persönlich.
+        </Typography>
         <Box sx={{ display: "flex", flexDirection: "column", gap: 2.5 }}>
           <TextField
             label="Markenname"
@@ -145,7 +149,7 @@ export default function SettingsPage() {
           />
           <TextField
             label="Kontext für die KI"
-            helperText="Was macht die Marke, was ist nicht gemeint? Hilft der KI, Verwechslungen zu erkennen."
+            helperText="Was macht die Marke, was ist nicht gemeint? Hilft Pulse, Verwechslungen zu erkennen."
             multiline
             minRows={3}
             value={form.context}

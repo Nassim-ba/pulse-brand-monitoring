@@ -1,6 +1,7 @@
 "use client";
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import Snackbar from "@mui/material/Snackbar";
+import { usePathname } from "next/navigation";
 import type { Mention, MentionStatus, SearchJob, Settings } from "@/lib/types";
 
 interface Meta {
@@ -11,6 +12,7 @@ interface Meta {
   job: SearchJob | null;
   lastRefresh: string | null;
   aiError: { message: string; at: string } | null;
+  user: { id: string; email: string; name: string } | null;
 }
 
 interface DataContextValue {
@@ -59,9 +61,18 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const pollRef = useRef<() => void>(() => {});
   const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  const pathname = usePathname();
+  const onLogin = pathname === "/login";
+
   const reload = useCallback(async () => {
     try {
       const res = await fetch("/api/mentions", { cache: "no-store" });
+      if (res.status === 401) {
+        // Session expired: back to the login page (a full load clears all client state).
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination -- intentional full reload
+        window.location.assign("/login");
+        return;
+      }
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Fehler beim Laden");
       setMentions(data.mentions);
@@ -77,9 +88,10 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    if (onLogin) return;
     // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data load
     reload();
-  }, [reload]);
+  }, [reload, onLogin]);
 
   // Poll a running search until all sources are done, then reload the data.
   const poll = useCallback(async () => {

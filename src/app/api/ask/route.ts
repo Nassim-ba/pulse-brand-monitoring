@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/context";
 import { z } from "zod";
 import { ask, LimitError } from "@/lib/service";
 
@@ -12,7 +13,7 @@ const Body = z.object({
   filters: z.record(z.string(), z.unknown()).default({}),
 });
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Bitte eine Frage mit 3 bis 500 Zeichen stellen." }, { status: 400 });
   try {
@@ -24,3 +25,5 @@ export async function POST(request: Request) {
     return Response.json({ error: "Die Frage konnte gerade nicht beantwortet werden. Bitte erneut versuchen." }, { status: 500 });
   }
 }
+
+export const POST = (...args: Parameters<typeof handlePOST>) => withUser(() => handlePOST(...args));

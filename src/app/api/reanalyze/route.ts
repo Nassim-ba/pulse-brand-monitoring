@@ -1,8 +1,9 @@
+import { withUser } from "@/lib/context";
 import { CooldownError, reanalyzeAll } from "@/lib/service";
 
 export const maxDuration = 120;
 
-export async function POST() {
+async function handlePOST() {
   try {
     const count = await reanalyzeAll();
     return Response.json({ count });
@@ -12,3 +13,5 @@ export async function POST() {
     return Response.json({ error: "Neuanalyse fehlgeschlagen." }, { status: 500 });
   }
 }
+
+export const POST = (...args: Parameters<typeof handlePOST>) => withUser(() => handlePOST(...args));

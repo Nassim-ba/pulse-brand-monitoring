@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/context";
 import { z } from "zod";
 import {
   addCompetitor,
@@ -22,7 +23,7 @@ function parseFilters(request: Request): MentionFilters {
 }
 
 /** Comparison of the monitored brand with its competitors. `poll=1` advances running searches first. */
-export async function GET(request: Request) {
+async function handleGET(request: Request) {
   try {
     if (new URL(request.url).searchParams.get("poll") === "1") await pollComparison();
     return Response.json(await getComparison(parseFilters(request)));
@@ -39,7 +40,7 @@ const Action = z.discriminatedUnion("action", [
   z.object({ action: z.literal("suggest") }),
 ]);
 
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const parsed = Action.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return Response.json({ error: "Ungültige Anfrage." }, { status: 400 });
   const body = parsed.data;
@@ -64,3 +65,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "Aktion fehlgeschlagen." }, { status: 500 });
   }
 }
+
+export const GET = (...args: Parameters<typeof handleGET>) => withUser(() => handleGET(...args));
+export const POST = (...args: Parameters<typeof handlePOST>) => withUser(() => handlePOST(...args));

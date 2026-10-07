@@ -1,9 +1,10 @@
+import { withUser } from "@/lib/context";
 import { LimitError, NotBrandError, pollSearch, startSearch } from "@/lib/service";
 
 export const maxDuration = 120;
 
 /** Starts a search for the given brand (or the active one). */
-export async function POST(request: Request) {
+async function handlePOST(request: Request) {
   const body = (await request.json().catch(() => ({}))) as { brand?: string };
   const brand = typeof body.brand === "string" ? body.brand.trim() : undefined;
   if (brand !== undefined && (brand.length < 2 || brand.length > 60)) {
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
 }
 
 /** Polls the running search of the active brand. */
-export async function GET() {
+async function handleGET() {
   try {
     return Response.json({ job: await pollSearch() });
   } catch (err) {
@@ -28,3 +29,6 @@ export async function GET() {
     return Response.json({ error: "Status konnte nicht abgefragt werden." }, { status: 500 });
   }
 }
+
+export const POST = (...args: Parameters<typeof handlePOST>) => withUser(() => handlePOST(...args));
+export const GET = (...args: Parameters<typeof handleGET>) => withUser(() => handleGET(...args));

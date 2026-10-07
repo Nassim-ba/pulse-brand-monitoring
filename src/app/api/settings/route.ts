@@ -1,3 +1,4 @@
+import { withUser } from "@/lib/context";
 import { z } from "zod";
 import { store } from "@/lib/store";
 
@@ -19,11 +20,11 @@ const SettingsSchema = z.object({
   }),
 });
 
-export async function GET() {
+async function handleGET() {
   return Response.json({ settings: await store.getSettings() });
 }
 
-export async function PUT(request: Request) {
+async function handlePUT(request: Request) {
   const parsed = SettingsSchema.safeParse(await request.json().catch(() => null));
   if (!parsed.success) {
     return Response.json({ error: "Ungültige Einstellungen.", issues: parsed.error.issues }, { status: 400 });
@@ -31,3 +32,6 @@ export async function PUT(request: Request) {
   await store.saveSettings(parsed.data);
   return Response.json({ settings: parsed.data });
 }
+
+export const GET = (...args: Parameters<typeof handleGET>) => withUser(() => handleGET(...args));
+export const PUT = (...args: Parameters<typeof handlePUT>) => withUser(() => handlePUT(...args));
