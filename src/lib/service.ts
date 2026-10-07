@@ -249,7 +249,7 @@ export async function pollSearch(slugParam?: string): Promise<SearchJob | null> 
 
   if (!Object.values(job.sources).some((x) => isActive(x.status))) job.status = "done";
   await store.setKv(jobKey(slug), job);
-  await loadMentions({ slug }); // analyse what came in
+  await loadMentions({ slug, background: true }); // analyse what came in, without holding up the poll
   return job;
 }
 

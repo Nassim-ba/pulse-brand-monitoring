@@ -101,13 +101,23 @@ function CompetitorView() {
     tickRef.current = tick;
   }, [tick]);
 
+  // Show stored data immediately, then advance running searches in the background.
   useEffect(() => {
     if (timer.current) clearTimeout(timer.current);
-    timer.current = setTimeout(() => tickRef.current(), 0);
+    const first = setTimeout(() => {
+      load()
+        .then((list) => {
+          if (list.some(isBusy)) timer.current = setTimeout(() => tickRef.current(), 2000);
+        })
+        .catch(() => {
+          timer.current = setTimeout(() => tickRef.current(), 3000);
+        });
+    }, 0);
     return () => {
+      clearTimeout(first);
       if (timer.current) clearTimeout(timer.current);
     };
-  }, [tick, settings?.brand]);
+  }, [load, settings?.brand]);
 
   const busy = !brands || brands.some(isBusy);
   const competitorCount = (brands?.length ?? 1) - 1;
