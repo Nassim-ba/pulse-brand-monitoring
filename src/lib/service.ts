@@ -1,4 +1,5 @@
 import "server-only";
+import { after } from "next/server";
 import { aiEnabled, aiStatus, analyzeMentions, generateProfile, summarize } from "./ai";
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
@@ -7,7 +8,7 @@ import { demoMentions } from "./demo-data";
 import { applyFilters, brandSlug } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
-import type { Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
+import type { Analysis, Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
 
 const SEARCH_COOLDOWN_MS = 10 * 60_000; // per brand
 const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget on the public demo
@@ -30,8 +31,36 @@ async function recordAiStatus() {
   aiStatus.ok = false;
 }
 
-/** Seeds demo data (if enabled) and analyses everything that has no analysis yet. */
-export async function loadMentions(): Promise<{ settings: Settings; mentions: Mention[] }> {
+const ANALYSIS_LOCK_MS = 90_000;
+
+/** Analyses mentions without (Claude) analysis. A lock keeps parallel requests from doing the same work twice. */
+async function analyzePending(settings: Settings, mentions: Mention[]): Promise<Map<string, Analysis>> {
+  const slug = brandSlug(settings.brand);
+  // Rule-based results are retried with Claude once the API is reachable again, at most every 10 minutes.
+  const aiError = aiEnabled ? await store.getKv<AiError>("aiError") : null;
+  const retryAi = aiEnabled && (!aiError || Date.now() - new Date(aiError.at).getTime() > 10 * 60_000);
+  const pending = mentions.filter((m) => !m.analysis || (retryAi && m.analysis.analyzedBy === "heuristic"));
+  if (!pending.length) return new Map();
+
+  const lock = await store.getKv<number>(`analyzing:${slug}`);
+  if (lock && Date.now() - lock < ANALYSIS_LOCK_MS) return new Map();
+  await store.setKv(`analyzing:${slug}`, Date.now());
+  try {
+    const results = await analyzeMentions(pending, settings);
+    await Promise.all([...results].map(([id, a]) => store.saveAnalysis(id, a)));
+    await recordAiStatus();
+    return results;
+  } finally {
+    await store.setKv(`analyzing:${slug}`, 0);
+  }
+}
+
+/**
+ * Seeds demo data (if enabled) and makes sure everything gets analysed. With
+ * `background`, the response is not held up: analysis runs after it is sent and
+ * the client picks up the results on its next fetch.
+ */
+export async function loadMentions({ background = false } = {}): Promise<{ settings: Settings; mentions: Mention[] }> {
   const settings = await store.getSettings();
   const brand = brandSlug(settings.brand);
 
@@ -45,15 +74,12 @@ export async function loadMentions(): Promise<{ settings: Settings; mentions: Me
   }
 
   let mentions = await store.listMentions(brand);
-  // Analyse new mentions. Rule-based results are retried with Claude once the API is
-  // reachable again, at most every 10 minutes.
-  const aiError = aiEnabled ? await store.getKv<AiError>("aiError") : null;
-  const retryAi = aiEnabled && (!aiError || Date.now() - new Date(aiError.at).getTime() > 10 * 60_000);
-  const pending = mentions.filter((m) => !m.analysis || (retryAi && m.analysis.analyzedBy === "heuristic"));
-  if (pending.length) {
-    const results = await analyzeMentions(pending, settings);
-    await Promise.all([...results].map(([id, a]) => store.saveAnalysis(id, a)));
-    await recordAiStatus();
+  if (background) {
+    if (mentions.some((m) => !m.analysis || m.analysis.analyzedBy === "heuristic")) {
+      after(() => analyzePending(settings, mentions).catch((err) => console.error("Background analysis failed:", err)));
+    }
+  } else {
+    const results = await analyzePending(settings, mentions);
     mentions = mentions.map((m) => (results.has(m.id) ? { ...m, analysis: results.get(m.id)! } : m));
   }
   if (!settings.demoData) mentions = mentions.filter((m) => !m.isDemo);
@@ -238,10 +264,10 @@ export async function switchBrand(slug: string): Promise<boolean> {
 }
 
 export async function getSummary(filters: MentionFilters, scopeLabel: string, force = false): Promise<Summary> {
-  const { settings, mentions } = await loadMentions();
+  const { settings, mentions } = await loadMentions({ background: true });
   const scoped = applyFilters(mentions, filters);
   const key = `summary:${brandSlug(settings.brand)}:${scoped
-    .map((m) => `${m.id}${m.status[0]}`)
+    .map((m) => `${m.id}${m.status[0]}${m.analysis?.analyzedBy[0] ?? "-"}`)
     .sort()
     .join(",")}`.slice(0, 2000);
   if (!force) {

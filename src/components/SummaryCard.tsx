@@ -11,7 +11,7 @@ import { useData } from "./DataProvider";
 import { AnalyzedBy } from "./bits";
 
 export function SummaryCard({ filters, scopeLabel }: { filters: MentionFilters; scopeLabel: string }) {
-  const { mentions, loading: dataLoading } = useData();
+  const { mentions, loading: dataLoading, pending } = useData();
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
@@ -43,10 +43,10 @@ export function SummaryCard({ filters, scopeLabel }: { filters: MentionFilters; 
   );
 
   useEffect(() => {
-    if (dataLoading) return;
+    if (dataLoading || pending > 0) return; // wait until every mention is analysed
     const t = setTimeout(() => load(), 400); // debounce while filters change
     return () => clearTimeout(t);
-  }, [load, dataLoading, statusKey]);
+  }, [load, dataLoading, statusKey, pending]);
 
   return (
     <Box
@@ -74,7 +74,15 @@ export function SummaryCard({ filters, scopeLabel }: { filters: MentionFilters; 
         </Button>
       </Box>
 
-      {loading || dataLoading ? (
+      {pending > 0 && !dataLoading ? (
+        <Box>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            Claude analysiert gerade {pending} {pending === 1 ? "Beitrag" : "Beiträge"}. Der Lagebericht folgt, sobald alle bewertet sind.
+          </Typography>
+          <Skeleton variant="text" width="60%" height={36} sx={{ bgcolor: "rgba(127,127,127,.2)" }} />
+          <Skeleton variant="text" sx={{ bgcolor: "rgba(127,127,127,.2)" }} />
+        </Box>
+      ) : loading || dataLoading ? (
         <Box>
           <Skeleton variant="text" width="60%" height={36} sx={{ bgcolor: "rgba(127,127,127,.2)" }} />
           <Skeleton variant="text" sx={{ bgcolor: "rgba(127,127,127,.2)" }} />

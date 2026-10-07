@@ -25,6 +25,8 @@ interface DataContextValue {
   search: (brand: string) => Promise<void>;
   switchBrand: (slug: string) => Promise<void>;
   job: SearchJob | null;
+  /** Mentions still waiting for their analysis. */
+  pending: number;
   setStatus: (id: string, status: MentionStatus) => Promise<void>;
   saveSettings: (s: Settings) => Promise<boolean>;
   toast: (message: string) => void;
@@ -52,6 +54,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   const [job, setJob] = useState<SearchJob | null>(null);
   const pollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pollRef = useRef<() => void>(() => {});
+  const pendingTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const reload = useCallback(async () => {
     try {
@@ -101,6 +104,16 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     pollRef.current = poll;
   }, [poll]);
+
+  // While analyses run in the background, fetch again until every mention has one.
+  const pending = useMemo(() => mentions.filter((m) => !m.analysis).length, [mentions]);
+  useEffect(() => {
+    if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    if (pending > 0 && job?.status !== "running") pendingTimer.current = setTimeout(reload, 4000);
+    return () => {
+      if (pendingTimer.current) clearTimeout(pendingTimer.current);
+    };
+  }, [pending, mentions, job?.status, reload]);
 
   useEffect(() => () => {
     if (pollTimer.current) clearTimeout(pollTimer.current);
@@ -202,13 +215,14 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
       search,
       switchBrand,
       job,
+      pending,
       setStatus,
       saveSettings,
       toast: setMessage,
       selectedId,
       openMention: setSelectedId,
     }),
-    [mentions, settings, meta, loading, refreshing, error, reload, refresh, search, switchBrand, job, setStatus, saveSettings, selectedId],
+    [mentions, settings, meta, loading, refreshing, error, reload, refresh, search, switchBrand, job, pending, setStatus, saveSettings, selectedId],
   );
 
   return (

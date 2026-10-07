@@ -15,9 +15,19 @@ import { useData } from "./DataProvider";
 
 /** Shows the progress of the running brand search per source. */
 export function SearchProgress() {
-  const { job } = useData();
+  const { job, pending } = useData();
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [openedAt] = useState(() => Date.now());
+  if ((!job || dismissed === job.id) && pending > 0) {
+    return (
+      <Box sx={{ borderRadius: 4, bgcolor: "var(--md-surface-container)", overflow: "hidden", mb: 2 }}>
+        <LinearProgress />
+        <Typography variant="body2" sx={{ p: 2 }}>
+          Claude analysiert {pending} neue {pending === 1 ? "Beitrag" : "Beiträge"} auf Relevanz, Stimmung, Thema und Handlungsbedarf …
+        </Typography>
+      </Box>
+    );
+  }
   if (!job || dismissed === job.id) return null;
   // Older finished searches are not worth the space.
   if (job.status === "done" && openedAt - new Date(job.startedAt).getTime() > 15 * 60_000) return null;
@@ -27,14 +37,16 @@ export function SearchProgress() {
 
   return (
     <Box sx={{ borderRadius: 4, bgcolor: "var(--md-surface-container)", overflow: "hidden", mb: 2 }}>
-      {running ? <LinearProgress /> : null}
+      {running || pending > 0 ? <LinearProgress /> : null}
       <Box sx={{ p: 2, display: "flex", gap: 2, alignItems: "flex-start" }}>
         <Box sx={{ flex: 1, minWidth: 0 }}>
           <Typography variant="subtitle2">
             {running ? `Suche nach „${job.brandName}“ läuft` : `Suche nach „${job.brandName}“ abgeschlossen`}
           </Typography>
           <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)", mb: 1.5 }}>
-            {running
+            {!running && pending > 0
+              ? `Claude analysiert noch ${pending} ${pending === 1 ? "Beitrag" : "Beiträge"} …`
+              : running
               ? "Social-Media-Quellen brauchen ein bis zwei Minuten. Neue Beiträge erscheinen automatisch und werden sofort analysiert."
               : `Gestartet ${new Date(job.startedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`}
           </Typography>
