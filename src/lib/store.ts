@@ -170,8 +170,12 @@ const base: BaseStore = dbUrl ? createPgStore(dbUrl) : createMemoryStore();
 // ---------- Brand profiles (shared by both backends) ----------
 
 function withDefaults(p: Partial<Settings>): Settings {
+  const isDefaultBrand = !p.brand || brandSlug(p.brand) === brandSlug(DEFAULT_SETTINGS.brand);
   return {
     ...DEFAULT_SETTINGS,
+    // Brand-specific defaults must not leak into other brands' profiles.
+    domain: isDefaultBrand ? DEFAULT_SETTINGS.domain : undefined,
+    demoData: isDefaultBrand ? DEFAULT_SETTINGS.demoData : false,
     ...p,
     hashtags: p.hashtags ?? (p.brand && p.brand !== DEFAULT_SETTINGS.brand ? [p.brand.toLowerCase().replace(/[^a-z0-9]/g, "")] : DEFAULT_SETTINGS.hashtags),
     sources: { ...DEFAULT_SETTINGS.sources, ...(p.sources ?? {}) },
