@@ -198,13 +198,17 @@ export const store = {
     const active = (await base.getKv<string>("activeBrand")) ?? brandSlug(DEFAULT_SETTINGS.brand);
     return (await getProfile(active)) ?? withDefaults(DEFAULT_SETTINGS);
   },
-  /** Saves the profile and makes it the active brand. */
-  async saveSettings(s: Settings): Promise<void> {
+  /** Saves a brand profile without making it the active brand. */
+  async saveProfile(s: Settings): Promise<void> {
     const slug = brandSlug(s.brand);
     await base.setKv(`profile:${slug}`, s);
-    await base.setKv("activeBrand", slug);
     const brands = (await base.getKv<BrandEntry[]>("brands")) ?? [{ slug: brandSlug(DEFAULT_SETTINGS.brand), name: DEFAULT_SETTINGS.brand }];
     await base.setKv("brands", [{ slug, name: s.brand }, ...brands.filter((b) => b.slug !== slug)].slice(0, 12));
+  },
+  /** Saves the profile and makes it the active brand. */
+  async saveSettings(s: Settings): Promise<void> {
+    await store.saveProfile(s);
+    await base.setKv("activeBrand", brandSlug(s.brand));
   },
   async listBrands(): Promise<BrandEntry[]> {
     return (await base.getKv<BrandEntry[]>("brands")) ?? [{ slug: brandSlug(DEFAULT_SETTINGS.brand), name: DEFAULT_SETTINGS.brand }];

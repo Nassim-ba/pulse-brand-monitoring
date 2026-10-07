@@ -20,6 +20,8 @@ import TuneOutlined from "@mui/icons-material/TuneOutlined";
 import Tune from "@mui/icons-material/Tune";
 import AutoAwesome from "@mui/icons-material/AutoAwesome";
 import AutoAwesomeOutlined from "@mui/icons-material/AutoAwesomeOutlined";
+import Leaderboard from "@mui/icons-material/Leaderboard";
+import LeaderboardOutlined from "@mui/icons-material/LeaderboardOutlined";
 import Refresh from "@mui/icons-material/Refresh";
 import DarkMode from "@mui/icons-material/DarkModeOutlined";
 import LightMode from "@mui/icons-material/LightModeOutlined";
@@ -34,8 +36,10 @@ const NAV = [
   { href: "/", label: "Übersicht", icon: DashboardOutlined, activeIcon: Dashboard },
   { href: "/erwaehnungen", label: "Erwähnungen", icon: ForumOutlined, activeIcon: Forum },
   { href: "/handlungsbedarf", label: "Handlungsbedarf", shortLabel: "Aufgaben", icon: FlagOutlined, activeIcon: Flag },
+  { href: "/wettbewerb", label: "Wettbewerb", icon: LeaderboardOutlined, activeIcon: Leaderboard },
   { href: "/fragen", label: "Frag Pulse", shortLabel: "Frag Pulse", icon: AutoAwesomeOutlined, activeIcon: AutoAwesome },
-  { href: "/einstellungen", label: "Einstellungen", icon: TuneOutlined, activeIcon: Tune },
+  // The mobile navigation bar holds at most five destinations; settings move to the top bar there.
+  { href: "/einstellungen", label: "Einstellungen", icon: TuneOutlined, activeIcon: Tune, desktopOnly: true },
 ];
 
 function useOpenActions() {
@@ -137,7 +141,7 @@ function BarItems({ qs }: { qs: string }) {
   const openActions = useOpenActions();
   return (
     <>
-        {NAV.map((item) => {
+        {NAV.filter((item) => !("desktopOnly" in item)).map((item) => {
           const active = isActive(pathname, item.href);
           const Icon = active ? item.activeIcon : item.icon;
           return (
@@ -267,6 +271,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </Box>
           <Box sx={{ display: { xs: "block", md: "none" } }}>
             <RefreshButton />
+          </Box>
+          <Box sx={{ display: { xs: "block", md: "none" } }}>
+            <Tooltip title="Einstellungen">
+              <IconButton component={Link} href="/einstellungen" aria-label="Einstellungen">
+                <TuneOutlined />
+              </IconButton>
+            </Tooltip>
           </Box>
           <ThemeToggle />
         </Box>

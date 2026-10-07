@@ -1,13 +1,14 @@
 import "server-only";
 import { after } from "next/server";
-import { aiEnabled, aiStatus, analyzeMentions, askAboutMentions, generateProfile, summarize, type AskTurn } from "./ai";
+import { aiEnabled, aiStatus, analyzeMentions, askAboutMentions, compareBrands, generateProfile, suggestCompetitorNames, summarize, type AskTurn } from "./ai";
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
 import { validateBrandInput } from "./validate";
-import { applyFilters, brandSlug, byDate, byRelevance } from "./filters";
+import { applyFilters, brandSlug, byDate, byReach, byRelevance, interactions, reach } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
-import type { Analysis, Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
+import { SENTIMENTS, TOPICS, type Analysis, type BrandStats, type CompetitorInsight, type Mention, type MentionFilters, type SearchJob, type Settings, type Summary } from "./types";
+import { TOPIC_LABELS } from "./labels";
 
 const SEARCH_COOLDOWN_MS = 10 * 60_000; // per brand
 const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget of the public app
@@ -58,10 +59,13 @@ async function analyzePending(settings: Settings, mentions: Mention[]): Promise<
  * `background`, the response is not held up: analysis runs after it is sent and
  * the client picks up the results on its next fetch.
  */
-export async function loadMentions({ background = false } = {}): Promise<{ settings: Settings; mentions: Mention[] }> {
-  const settings = await store.getSettings();
+export async function loadMentions({ background = false, slug }: { background?: boolean; slug?: string } = {}): Promise<{
+  settings: Settings;
+  mentions: Mention[];
+}> {
+  const settings = slug ? await store.getProfile(slug) : await store.getSettings();
+  if (!settings) throw new Error(`Unknown brand ${slug}`);
   const brand = brandSlug(settings.brand);
-
 
   let mentions = await store.listMentions(brand);
   if (background) {
@@ -90,7 +94,23 @@ async function backfillProfile(settings: Settings): Promise<Settings> {
 export class LimitError extends Error {}
 export class NotBrandError extends Error {}
 
+/** Validates the input and returns the brand's profile, creating it via Claude for new brands. */
+async function resolveProfile(input: string): Promise<Settings> {
+  const name = input.trim().replace(/\s+/g, " ").slice(0, 60);
+  const invalid = validateBrandInput(name);
+  if (invalid) throw new NotBrandError(invalid);
 
+  const known = await store.getProfile(brandSlug(name));
+  if (known) return backfillProfile(known);
+
+  const profile = await generateProfile(name);
+  await recordAiStatus();
+  if (profile && !profile.isBrand) throw new NotBrandError(`„${name}“ ist keine erkennbare Marke. ${profile.reason}`);
+  if (!profile) return basicProfile(name);
+  const { brand, domain, keywords, excludeKeywords, hashtags, context } = profile;
+  // The canonical name may map to an already known brand ("adiddas" → "Adidas").
+  return (await store.getProfile(brandSlug(brand))) ?? { ...basicProfile(brand), brand, domain, keywords, excludeKeywords, hashtags, context };
+}
 
 const jobKey = (slug: string) => `job:${slug}`;
 const isActive = (st: string) => st === "running" || st === "queued";
@@ -120,29 +140,11 @@ async function tryStart(src: (typeof APIFY_SOURCES)[number], settings: Settings,
  * Starts a search for a brand: creates the profile (via Claude for new brands),
  * fetches news synchronously and starts the Apify runs, which are polled later.
  */
-export async function startSearch(brandName?: string): Promise<SearchJob> {
-  const current = await store.getSettings();
-  const name = (brandName ?? current.brand).trim().replace(/\s+/g, " ").slice(0, 60);
-  const invalid = validateBrandInput(name);
-  if (invalid) throw new NotBrandError(invalid);
-
-  let settings = await store.getProfile(brandSlug(name));
-  if (!settings) {
-    const profile = await generateProfile(name);
-    await recordAiStatus();
-    if (profile && !profile.isBrand) throw new NotBrandError(`„${name}“ ist keine erkennbare Marke. ${profile.reason}`);
-    if (profile?.isBrand) {
-      const { brand, domain, keywords, excludeKeywords, hashtags, context } = profile;
-      const fields = { brand, domain, keywords, excludeKeywords, hashtags, context };
-      // The canonical name may map to an already known brand ("adiddas" → "Adidas").
-      settings = (await store.getProfile(brandSlug(fields.brand))) ?? { ...basicProfile(fields.brand), ...fields };
-    } else {
-      settings = basicProfile(name);
-    }
-  } else {
-    settings = await backfillProfile(settings);
-  }
-  await store.saveSettings(settings);
+export async function startSearch(brandName?: string, { activate = true }: { activate?: boolean } = {}): Promise<SearchJob> {
+  const settings = await resolveProfile(brandName ?? (await store.getSettings()).brand);
+  // Competitor searches must not switch the monitored brand.
+  if (activate) await store.saveSettings(settings);
+  else await store.saveProfile(settings);
   const slug = brandSlug(settings.brand);
   const existing = await store.getKv<SearchJob>(jobKey(slug));
 
@@ -202,8 +204,9 @@ export async function startSearch(brandName?: string): Promise<SearchJob> {
 }
 
 /** Checks running Apify runs, imports finished results and analyses them. */
-export async function pollSearch(): Promise<SearchJob | null> {
-  const settings = await store.getSettings();
+export async function pollSearch(slugParam?: string): Promise<SearchJob | null> {
+  const settings = slugParam ? await store.getProfile(slugParam) : await store.getSettings();
+  if (!settings) return null;
   const slug = brandSlug(settings.brand);
   const job = await store.getKv<SearchJob>(jobKey(slug));
   if (!job || job.status === "done") return job;
@@ -246,7 +249,7 @@ export async function pollSearch(): Promise<SearchJob | null> {
 
   if (!Object.values(job.sources).some((x) => isActive(x.status))) job.status = "done";
   await store.setKv(jobKey(slug), job);
-  await loadMentions(); // analyse what came in
+  await loadMentions({ slug }); // analyse what came in
   return job;
 }
 
@@ -345,5 +348,142 @@ export async function ask(question: string, history: AskTurn[], filters: Mention
     aiStatus.lastError = err instanceof Error ? err.message.slice(0, 300) : String(err);
     await recordAiStatus();
     throw err;
+  }
+}
+
+// ---------- Competitor comparison ----------
+
+const MAX_COMPETITORS = 3;
+
+async function comparisonBrands(): Promise<{ own: Settings; competitors: Settings[] }> {
+  const own = await store.getSettings();
+  const competitors = (
+    await Promise.all((own.competitors ?? []).map((slug) => store.getProfile(slug)))
+  ).filter((p): p is Settings => Boolean(p));
+  return { own, competitors };
+}
+
+export async function suggestCompetitors(): Promise<string[]> {
+  const { own, competitors } = await comparisonBrands();
+  const cached = await store.getKv<string[]>(`suggestions:${brandSlug(own.brand)}`);
+  const names = cached ?? (await suggestCompetitorNames(own));
+  await recordAiStatus();
+  if (!cached && names.length) await store.setKv(`suggestions:${brandSlug(own.brand)}`, names);
+  const taken = new Set([brandSlug(own.brand), ...competitors.map((c) => brandSlug(c.brand))]);
+  return names.filter((n) => !taken.has(brandSlug(n)));
+}
+
+export async function addCompetitor(name: string): Promise<void> {
+  const own = await store.getSettings();
+  const list = own.competitors ?? [];
+  if (list.length >= MAX_COMPETITORS) throw new LimitError(`Es lassen sich höchstens ${MAX_COMPETITORS} Wettbewerber vergleichen.`);
+  const profile = await resolveProfile(name);
+  const slug = brandSlug(profile.brand);
+  if (slug === brandSlug(own.brand)) throw new NotBrandError("Das ist die überwachte Marke selbst.");
+  await store.saveProfile(profile);
+  if (!list.includes(slug)) await store.saveSettings({ ...own, competitors: [...list, slug] });
+}
+
+export async function removeCompetitor(slug: string): Promise<void> {
+  const own = await store.getSettings();
+  await store.saveSettings({ ...own, competitors: (own.competitors ?? []).filter((s) => s !== slug) });
+}
+
+/** Starts (or reuses) searches for the monitored brand and all competitors. */
+export async function refreshComparison(): Promise<void> {
+  const { own, competitors } = await comparisonBrands();
+  for (const brand of [own, ...competitors]) {
+    await startSearch(brand.brand, { activate: false });
+  }
+}
+
+/** Advances the searches of all compared brands. */
+export async function pollComparison(): Promise<void> {
+  const { own, competitors } = await comparisonBrands();
+  await Promise.all([own, ...competitors].map((b) => pollSearch(brandSlug(b.brand))));
+}
+
+function statsFor(settings: Settings, mentions: Mention[], filters: MentionFilters, isOwn: boolean, job: SearchJob | null, lastSearch: string | null) {
+  const scoped = applyFilters(mentions, filters).filter((m) => m.analysis);
+  const sentiment = Object.fromEntries(SENTIMENTS.map((s) => [s, scoped.filter((m) => m.analysis!.sentiment === s).length])) as BrandStats["sentiment"];
+  const net = scoped.length ? Math.round(((sentiment.positive - sentiment.negative) / scoped.length) * 100) : 0;
+  const topTopics = TOPICS.map((t) => ({ topic: t, count: scoped.filter((m) => m.analysis!.topic === t).length }))
+    .filter((x) => x.count)
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 3);
+  const platformMap = new Map<string, number>();
+  scoped.forEach((m) => platformMap.set(m.sourceLabel.split(" · ")[0], (platformMap.get(m.sourceLabel.split(" · ")[0]) ?? 0) + 1));
+  return {
+    scoped,
+    stats: {
+      slug: brandSlug(settings.brand),
+      name: settings.brand,
+      domain: settings.domain,
+      isOwn,
+      mentions: scoped.length,
+      shareOfVoice: 0,
+      reach: scoped.reduce((n, m) => n + reach(m), 0),
+      shareOfReach: 0,
+      interactions: scoped.reduce((n, m) => n + interactions(m), 0),
+      sentiment,
+      net,
+      topTopics,
+      platforms: [...platformMap].map(([name, count]) => ({ name, count })).sort((a, b) => b.count - a.count),
+      pending: mentions.filter((m) => !m.analysis).length,
+      lastSearch,
+      job,
+    } satisfies BrandStats,
+  };
+}
+
+async function collectComparison(filters: MentionFilters) {
+  const { own, competitors } = await comparisonBrands();
+  const rows = await Promise.all(
+    [own, ...competitors].map(async (b, i) => {
+      const slug = brandSlug(b.brand);
+      const { mentions } = await loadMentions({ background: true, slug });
+      const job = await store.getKv<SearchJob>(jobKey(slug));
+      const lastSearch = await store.getKv<string>(`lastRefresh:${slug}`);
+      return statsFor(b, mentions, filters, i === 0, job, lastSearch);
+    }),
+  );
+  const totalMentions = rows.reduce((n, r) => n + r.stats.mentions, 0);
+  const totalReach = rows.reduce((n, r) => n + r.stats.reach, 0);
+  for (const r of rows) {
+    r.stats.shareOfVoice = totalMentions ? Math.round((r.stats.mentions / totalMentions) * 1000) / 10 : 0;
+    r.stats.shareOfReach = totalReach ? Math.round((r.stats.reach / totalReach) * 1000) / 10 : 0;
+  }
+  return { own, rows };
+}
+
+export async function getComparison(filters: MentionFilters): Promise<{ brands: BrandStats[]; maxCompetitors: number }> {
+  const { rows } = await collectComparison(filters);
+  return { brands: rows.map((r) => r.stats), maxCompetitors: MAX_COMPETITORS };
+}
+
+export async function getCompetitorInsight(filters: MentionFilters, force = false): Promise<CompetitorInsight | null> {
+  const { own, rows } = await collectComparison(filters);
+  if (rows.length < 2 || rows.some((r) => r.stats.pending > 0)) return null;
+  const key = `insight:${brandSlug(own.brand)}:${rows.map((r) => `${r.stats.slug}-${r.stats.mentions}-${r.stats.reach}-${r.stats.net}`).join(",")}:${JSON.stringify(filters)}`.slice(0, 1500);
+  if (!force) {
+    const cached = await store.getKv<CompetitorInsight>(key);
+    if (cached) return cached;
+  }
+  const input = rows.map(({ stats: s, scoped }) => ({
+    name: s.name + (s.isOwn ? " (eigene Marke)" : ""),
+    stats: `Relevante Erwähnungen ${s.mentions}, Share of Voice ${s.shareOfVoice} %, Reichweite ${s.reach}, Share of Reach ${s.shareOfReach} %, Interaktionen ${s.interactions}, Stimmung positiv ${s.sentiment.positive} / neutral ${s.sentiment.neutral} / negativ ${s.sentiment.negative}, Stimmungsindex ${s.net}, Top-Themen ${s.topTopics.map((t) => `${TOPIC_LABELS[t.topic]} (${t.count})`).join(", ") || "keine"}, Plattformen ${s.platforms.map((p) => `${p.name} ${p.count}`).join(", ") || "keine"}`,
+    samples: [...scoped].sort(byReach).slice(0, 8).map((m) => `[${m.sourceLabel.split(" · ")[0]}, ${m.analysis!.sentiment}] ${m.analysis!.summary}`),
+  }));
+  try {
+    const result = await compareBrands(own.brand, input);
+    await recordAiStatus();
+    if (!result) return null;
+    const insight = { ...result, generatedAt: new Date().toISOString() };
+    await store.setKv(key, insight);
+    return insight;
+  } catch (err) {
+    aiStatus.lastError = err instanceof Error ? err.message.slice(0, 300) : String(err);
+    await recordAiStatus();
+    return null;
   }
 }

@@ -12,6 +12,9 @@ Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group. Pulse
 - **Relevanz, Stimmung und Thema** für jede Erwähnung, inklusive Begründung. Verwechslungen mit gleichnamigen Firmen oder Abkürzungen erkennt die KI und sortiert sie aus.
 - **Handlungsbedarf** mit Dringlichkeit, Begründung, empfohlener Maßnahme und Antwortvorschlag. Beiträge lassen sich als erledigt markieren.
 - **KI-Lagebericht** für jeden Zeitraum und jede Filterauswahl.
+- **Wettbewerbsvergleich**: bis zu drei Wettbewerber (von Claude vorgeschlagen oder selbst gewählt) mit Share of Voice, Share of Reach, Stimmung, Engagement und einer KI-Wettbewerbsanalyse mit Stärken, Schwächen und Chancen.
+- **Frag Pulse**: Fragen zu den Erwähnungen stellen, Claude antwortet mit Quellenverweisen.
+- **Management-Report als PDF** mit Kennzahlen, Lagebericht, Handlungsbedarf und reichweitenstärksten Beiträgen, als Datei zum Herunterladen.
 - **Filter für die gesamte Auswertung** nach Zeitraum, Plattform, Stimmung, Thema, Relevanz und Handlungsbedarf. Kennzahlen, Diagramme und Lagebericht rechnen mit der Auswahl. Filter stehen in der URL und lassen sich teilen.
 - **Links zur Originalquelle** bei jeder Erwähnung.
 - **Material Design 3**, responsiv mit Navigation Rail am Desktop und Navigation Bar am Smartphone, helles und dunkles Design.

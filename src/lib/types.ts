@@ -71,6 +71,7 @@ export interface Settings {
   excludeKeywords: string[];
   hashtags: string[];
   context: string;
+  competitors?: string[]; // slugs of brand profiles to compare against
   sources: {
     googleNews: boolean;
     bingNews: boolean;
@@ -111,4 +112,32 @@ export interface MentionFilters {
   range?: "7d" | "30d" | "90d" | "all";
   actionOnly?: boolean;
   includeIrrelevant?: boolean;
+}
+
+export interface BrandStats {
+  slug: string;
+  name: string;
+  domain?: string;
+  isOwn: boolean;
+  mentions: number; // relevant, analysed mentions in scope
+  shareOfVoice: number; // 0–100
+  reach: number;
+  shareOfReach: number; // 0–100
+  interactions: number;
+  sentiment: Record<Sentiment, number>;
+  net: number; // positive minus negative share, in percentage points
+  topTopics: { topic: Topic; count: number }[];
+  platforms: { name: string; count: number }[];
+  pending: number; // mentions still being analysed
+  lastSearch: string | null;
+  job: SearchJob | null;
+}
+
+export interface CompetitorInsight {
+  headline: string;
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  opportunities: string[];
+  generatedAt: string;
 }

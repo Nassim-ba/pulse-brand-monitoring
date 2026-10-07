@@ -4,7 +4,7 @@ import { zodOutputFormat } from "@anthropic-ai/sdk/helpers/zod";
 import { z } from "zod";
 import { heuristicAnalysis, heuristicSummary } from "./heuristic";
 import { TOPIC_LABELS } from "./labels";
-import { SENTIMENTS, TOPICS, URGENCIES, type Analysis, type Mention, type RawMention, type Settings, type Summary } from "./types";
+import { SENTIMENTS, TOPICS, URGENCIES, type Analysis, type CompetitorInsight, type Mention, type RawMention, type Settings, type Summary } from "./types";
 
 const MODEL = process.env.ANTHROPIC_MODEL ?? "claude-haiku-4-5";
 const BATCH_SIZE = 12;
@@ -358,4 +358,63 @@ ${lines}`,
   aiStatus.ok = true;
   const valid = [...new Set(p.cited.filter((n) => Number.isInteger(n) && n >= 1 && n <= mentions.length))].slice(0, 6);
   return { answer: clean(p.answer)!, cited: valid };
+}
+
+// ---------- Competitors ----------
+
+const SuggestionSchema = z.object({
+  competitors: z.array(z.string()).describe("3 bis 5 direkte Wettbewerber, nur offizielle Markennamen."),
+});
+
+/** Lets Claude name direct competitors of a brand. */
+export async function suggestCompetitorNames(s: Settings): Promise<string[]> {
+  if (!client) return [];
+  try {
+    const response = await client.messages.parse({
+      model: MODEL,
+      max_tokens: 500,
+      system:
+        "Du nennst direkte Wettbewerber einer Marke für einen Brand-Monitoring-Vergleich: Unternehmen im selben Markt und in derselben Region, die Kunden als Alternative sehen. Nenne nur Marken, die du sicher kennst. Wenn du keine sicher kennst, gib eine leere Liste zurück.",
+      messages: [{ role: "user", content: `Marke: ${s.brand}\nKontext: ${s.context}` }],
+      output_config: { format: zodOutputFormat(SuggestionSchema) },
+    });
+    aiStatus.ok = true;
+    return (response.parsed_output?.competitors ?? []).map((c) => c.trim()).filter((c) => c.length >= 2 && c.length <= 60).slice(0, 5);
+  } catch (err) {
+    aiStatus.lastError = describeError(err);
+    return [];
+  }
+}
+
+const InsightSchema = z.object({
+  headline: z.string().describe("Kernaussage des Vergleichs in maximal 10 Wörtern."),
+  summary: z.string().describe("3 bis 4 Sätze: Wie steht die eigene Marke im Vergleich da? Mit Zahlen."),
+  strengths: z.array(z.string()).describe("2 bis 3 Stärken der eigenen Marke gegenüber den Wettbewerbern."),
+  weaknesses: z.array(z.string()).describe("2 bis 3 Schwächen oder Lücken gegenüber den Wettbewerbern."),
+  opportunities: z.array(z.string()).describe("2 bis 3 konkrete Chancen oder Maßnahmen für Marketing und Kommunikation."),
+});
+
+export async function compareBrands(
+  own: string,
+  rows: { name: string; stats: string; samples: string[] }[],
+): Promise<Omit<CompetitorInsight, "generatedAt"> | null> {
+  if (!client) return null;
+  const body = rows.map((r) => `## ${r.name}\n${r.stats}\nBeispiele:\n${r.samples.map((x) => `- ${x}`).join("\n")}`).join("\n\n");
+  const response = await client.messages.parse({
+    model: MODEL,
+    max_tokens: 2500,
+    system: `Du bist Marketing-Analyst und vergleichst die Online-Wahrnehmung von ${own} mit Wettbewerbern auf Basis von Brand-Monitoring-Daten. Share of Voice ist der Anteil an allen relevanten Erwähnungen, Share of Reach der Anteil an der gesamten Reichweite. Bewerte aus Sicht von ${own}. Schreib konkret, mit Zahlen, auf Deutsch, ohne Gedankenstriche. Beachte, dass kleine Stichproben nur begrenzt aussagekräftig sind, und sag das, wenn es relevant ist.`,
+    messages: [{ role: "user", content: body }],
+    output_config: { format: zodOutputFormat(InsightSchema) },
+  });
+  const p = response.parsed_output;
+  if (!p) return null;
+  aiStatus.ok = true;
+  return {
+    headline: clean(p.headline)!,
+    summary: clean(p.summary)!,
+    strengths: p.strengths.map((x) => clean(x)!),
+    weaknesses: p.weaknesses.map((x) => clean(x)!),
+    opportunities: p.opportunities.map((x) => clean(x)!),
+  };
 }
