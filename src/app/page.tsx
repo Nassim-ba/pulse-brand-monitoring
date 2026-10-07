@@ -258,7 +258,7 @@ function DashboardView() {
               hint={high ? `${high} mit hoher Dringlichkeit` : "Keine hohe Dringlichkeit"}
               tone={high ? "error" : "default"}
             />
-            <Kpi label="Von der KI aussortiert" value={stats.irrelevant.length} hint="Verwechslungen und Fremdtreffer" wide />
+            <Kpi label="Von Pulse aussortiert" value={stats.irrelevant.length} hint="Verwechslungen und Fremdtreffer" wide />
           </>
         )}
       </Box>

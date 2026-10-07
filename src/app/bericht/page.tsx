@@ -347,7 +347,7 @@ function ReportView() {
         </Section>
 
         <footer data-pdf-block style={{ marginTop: 24, paddingTop: 10, borderTop: `1px solid ${C.line}`, fontSize: 10, color: C.muted, display: "flex", justifyContent: "space-between", gap: 8 }}>
-          <span>Erstellt mit Pulse · KI-Analyse durch Claude (Anthropic) · Daten aus News, Google, Instagram und TikTok</span>
+          <span>Erstellt mit Pulse · KI-gestützte Analyse · Daten aus News, Google, Instagram und TikTok</span>
           <span>{data.analysed.length} analysierte Erwähnungen</span>
         </footer>
       </article>

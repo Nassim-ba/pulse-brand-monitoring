@@ -25,7 +25,7 @@ export function SearchProgress() {
         <Box sx={{ p: 2 }}>
           <Typography variant="subtitle2">Suche nach „{preparing}“ wird vorbereitet</Typography>
           <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
-            Claude prüft die Marke und erstellt das Suchprofil, danach starten News, Google, Instagram und TikTok.
+            Pulse prüft die Marke und erstellt das Suchprofil, danach starten News, Google, Instagram und TikTok.
           </Typography>
         </Box>
       </Box>
@@ -36,7 +36,7 @@ export function SearchProgress() {
       <Box sx={{ borderRadius: 4, bgcolor: "var(--md-surface-container)", overflow: "hidden", mb: 2 }}>
         <LinearProgress />
         <Typography variant="body2" sx={{ p: 2 }}>
-          Claude analysiert {pending} neue {pending === 1 ? "Beitrag" : "Beiträge"} auf Relevanz, Stimmung, Thema und Handlungsbedarf …
+          Pulse analysiert {pending} neue {pending === 1 ? "Beitrag" : "Beiträge"} auf Relevanz, Stimmung, Thema und Handlungsbedarf …
         </Typography>
       </Box>
     );
@@ -58,7 +58,7 @@ export function SearchProgress() {
           </Typography>
           <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)", mb: 1.5 }}>
             {!running && pending > 0
-              ? `Claude analysiert noch ${pending} ${pending === 1 ? "Beitrag" : "Beiträge"} …`
+              ? `Pulse analysiert noch ${pending} ${pending === 1 ? "Beitrag" : "Beiträge"} …`
               : running
               ? "Social-Media-Quellen brauchen ein bis zwei Minuten. Neue Beiträge erscheinen automatisch und werden sofort analysiert."
               : `Gestartet ${new Date(job.startedAt).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`}

@@ -140,7 +140,7 @@ export function SourceAvatar({ kind, size = 40 }: { kind: SourceKind; size?: num
 export function AnalyzedBy({ analysis }: { analysis: Pick<Analysis, "analyzedBy"> }) {
   return analysis.analyzedBy === "claude" ? (
     <Tag bg="var(--md-tertiary-container)" fg="var(--md-on-tertiary-container)" icon={<AutoAwesome />}>
-      KI-Analyse
+      Pulse-Analyse
     </Tag>
   ) : (
     <Tag outlined icon={<Rule />}>

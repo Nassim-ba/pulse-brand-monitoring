@@ -112,7 +112,7 @@ export default function SettingsPage() {
           Einstellungen
         </Typography>
         <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
-          Welche Marke Pulse überwacht und wie die KI sie einordnet.
+          Welche Marke Pulse überwacht und wie Pulse sie einordnet.
         </Typography>
       </Box>
 
@@ -182,7 +182,7 @@ export default function SettingsPage() {
               <Typography variant="body1">{meta?.aiEnabled ? "KI-Analyse aktiv" : "Regelbasierter Modus"}</Typography>
               <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
                 {meta?.aiEnabled
-                  ? "Claude (Anthropic) bewertet Relevanz, Stimmung, Thema und Handlungsbedarf und schreibt Antwortvorschläge und Lageberichte."
+                  ? "Pulse bewertet Relevanz, Stimmung, Thema und Handlungsbedarf und schreibt Antwortvorschläge und Lageberichte."
                   : "Kein API-Schlüssel hinterlegt. Pulse nutzt eine regelbasierte Analyse als Rückfallebene."}
               </Typography>
               {meta?.aiError ? (

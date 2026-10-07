@@ -77,7 +77,7 @@ export function SummaryCard({ filters, scopeLabel }: { filters: MentionFilters; 
       {pending > 0 && !dataLoading ? (
         <Box>
           <Typography variant="body2" sx={{ mb: 1 }}>
-            Claude analysiert gerade {pending} {pending === 1 ? "Beitrag" : "Beiträge"}. Der Lagebericht folgt, sobald alle bewertet sind.
+            Pulse analysiert gerade {pending} {pending === 1 ? "Beitrag" : "Beiträge"}. Der Lagebericht folgt, sobald alle bewertet sind.
           </Typography>
           <Skeleton variant="text" width="60%" height={36} sx={{ bgcolor: "rgba(127,127,127,.2)" }} />
           <Skeleton variant="text" sx={{ bgcolor: "rgba(127,127,127,.2)" }} />

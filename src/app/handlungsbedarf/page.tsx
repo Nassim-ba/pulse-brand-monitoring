@@ -29,7 +29,7 @@ export default function ActionsPage() {
           Handlungsbedarf
         </Typography>
         <Typography variant="body2" sx={{ color: "var(--md-on-surface-variant)" }}>
-          Von der KI markierte Beiträge, auf die das Team reagieren sollte, nach Dringlichkeit sortiert.
+          Von Pulse markierte Beiträge, auf die das Team reagieren sollte, nach Dringlichkeit sortiert.
         </Typography>
       </Box>
 
