@@ -1,10 +1,10 @@
 import "server-only";
 import { after } from "next/server";
-import { aiEnabled, aiStatus, analyzeMentions, generateProfile, summarize } from "./ai";
+import { aiEnabled, aiStatus, analyzeMentions, askAboutMentions, generateProfile, summarize, type AskTurn } from "./ai";
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
 import { validateBrandInput } from "./validate";
-import { applyFilters, brandSlug } from "./filters";
+import { applyFilters, brandSlug, byDate, byRelevance } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
 import type { Analysis, Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
@@ -298,4 +298,52 @@ export async function getMeta() {
     lastRefresh: await store.getKv<string>(`lastRefresh:${brandSlug(settings.brand)}`),
     aiError: aiEnabled ? await store.getKv<AiError>("aiError") : null,
   };
+}
+
+// ---------- Ask Pulse ----------
+
+const DAILY_QUESTION_LIMIT = 150;
+const MAX_CONTEXT_MENTIONS = 120;
+
+export interface AskResult {
+  answer: string;
+  sources: { n: number; id: string; title: string; sourceLabel: string; url: string }[];
+  basedOn: number;
+}
+
+export async function ask(question: string, history: AskTurn[], filters: MentionFilters): Promise<AskResult> {
+  if (!aiEnabled) throw new LimitError("Frag Pulse braucht die KI-Anbindung, die gerade nicht aktiv ist.");
+  const day = new Date().toISOString().slice(0, 10);
+  const used = (await store.getKv<number>(`questions:${day}`)) ?? 0;
+  if (used >= DAILY_QUESTION_LIMIT) throw new LimitError("Tageslimit für Fragen erreicht. Bitte morgen erneut versuchen.");
+  await store.setKv(`questions:${day}`, used + 1);
+
+  const { settings, mentions } = await loadMentions({ background: true });
+  // Most relevant first, then newest, so the context stays within budget.
+  const scoped = applyFilters(mentions, filters)
+    .filter((m) => m.analysis)
+    .sort(byRelevance)
+    .slice(0, MAX_CONTEXT_MENTIONS)
+    .sort(byDate);
+  if (!scoped.length) {
+    return { answer: "Für die aktuelle Auswahl liegen noch keine analysierten Erwähnungen vor. Starte eine Suche oder passe die Filter an.", sources: [], basedOn: 0 };
+  }
+
+  try {
+    const result = await askAboutMentions(question, history, scoped, settings);
+    await recordAiStatus();
+    if (!result) throw new Error("Keine Antwort erhalten");
+    return {
+      answer: result.answer,
+      sources: result.cited.map((n) => {
+        const m = scoped[n - 1];
+        return { n, id: m.id, title: m.analysis?.summary ?? m.title, sourceLabel: m.sourceLabel, url: m.url };
+      }),
+      basedOn: scoped.length,
+    };
+  } catch (err) {
+    aiStatus.lastError = err instanceof Error ? err.message.slice(0, 300) : String(err);
+    await recordAiStatus();
+    throw err;
+  }
 }

@@ -18,6 +18,8 @@ import FlagOutlined from "@mui/icons-material/FlagOutlined";
 import Flag from "@mui/icons-material/Flag";
 import TuneOutlined from "@mui/icons-material/TuneOutlined";
 import Tune from "@mui/icons-material/Tune";
+import AutoAwesome from "@mui/icons-material/AutoAwesome";
+import AutoAwesomeOutlined from "@mui/icons-material/AutoAwesomeOutlined";
 import Refresh from "@mui/icons-material/Refresh";
 import DarkMode from "@mui/icons-material/DarkModeOutlined";
 import LightMode from "@mui/icons-material/LightModeOutlined";
@@ -32,6 +34,7 @@ const NAV = [
   { href: "/", label: "Übersicht", icon: DashboardOutlined, activeIcon: Dashboard },
   { href: "/erwaehnungen", label: "Erwähnungen", icon: ForumOutlined, activeIcon: Forum },
   { href: "/handlungsbedarf", label: "Handlungsbedarf", shortLabel: "Aufgaben", icon: FlagOutlined, activeIcon: Flag },
+  { href: "/fragen", label: "Frag Pulse", shortLabel: "Frag Pulse", icon: AutoAwesomeOutlined, activeIcon: AutoAwesome },
   { href: "/einstellungen", label: "Einstellungen", icon: TuneOutlined, activeIcon: Tune },
 ];
 

@@ -291,3 +291,71 @@ Ist es eine Marke, erstelle ein Suchprofil. Wenn du die Marke nicht sicher kenns
     return null;
   }
 }
+
+// ---------- Ask Pulse ----------
+
+const AnswerSchema = z.object({
+  answer: z
+    .string()
+    .describe("Antwort auf Deutsch in 2 bis 6 Sätzen oder einer kurzen Liste mit Bindestrichen. Belege Aussagen mit Quellenverweisen wie [3]."),
+  cited: z.array(z.number()).describe("Nummern der Erwähnungen, auf die sich die Antwort stützt, nach Wichtigkeit sortiert, höchstens 6."),
+});
+
+export interface AskTurn {
+  role: "user" | "assistant";
+  content: string;
+}
+
+/** Answers a question about the given mentions, citing them by number. */
+export async function askAboutMentions(
+  question: string,
+  history: AskTurn[],
+  mentions: Mention[],
+  s: Settings,
+): Promise<{ answer: string; cited: number[] } | null> {
+  if (!client) return null;
+  const lines = mentions
+    .map((m, i) => {
+      const a = m.analysis;
+      return [
+        `[${i + 1}] ${m.publishedAt.slice(0, 10)} | ${m.sourceLabel}${m.author ? ` | ${m.author}` : ""}`,
+        a ? `${a.sentiment} | ${TOPIC_LABELS[a.topic]} | Relevanz ${a.relevance}${a.actionRequired ? ` | Handlungsbedarf ${a.urgency}${m.status === "done" ? " (erledigt)" : ""}` : ""}` : null,
+        m.metrics ? `Reichweite: ${formatMetrics(m.metrics)}` : null,
+        `Titel: ${m.title}`,
+        `Text: ${m.content.slice(0, 500)}`,
+      ]
+        .filter(Boolean)
+        .join("\n");
+    })
+    .join("\n\n");
+
+  const response = await client.messages.parse({
+    model: MODEL,
+    max_tokens: 2000,
+    system: [
+      {
+        type: "text",
+        text: `Du bist Pulse, ein Analyst für Brand Monitoring. Du beantwortest Fragen des Kommunikationsteams zur Marke ${s.brand} ausschließlich auf Basis der unten aufgeführten Erwähnungen.
+Kontext zur Marke: ${s.context}
+
+Regeln:
+- Stütze jede Aussage auf die Erwähnungen und verweise mit [Nummer] darauf.
+- Wenn die Erwähnungen die Frage nicht beantworten, sag das ehrlich, statt zu raten.
+- Nenne Zahlen, Plattformen und Reichweiten, wenn sie die Antwort stärken.
+- Schreib knapp und konkret, ohne Gedankenstriche, ohne Überschriften.
+- Fragen ohne Bezug zur Marke oder zum Monitoring lehnst du freundlich ab.
+
+Erwähnungen:
+${lines}`,
+        cache_control: { type: "ephemeral" },
+      },
+    ],
+    messages: [...history.slice(-6), { role: "user", content: question }],
+    output_config: { format: zodOutputFormat(AnswerSchema) },
+  });
+  const p = response.parsed_output;
+  if (!p) return null;
+  aiStatus.ok = true;
+  const valid = [...new Set(p.cited.filter((n) => Number.isInteger(n) && n >= 1 && n <= mentions.length))].slice(0, 6);
+  return { answer: clean(p.answer)!, cited: valid };
+}
