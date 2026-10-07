@@ -1,6 +1,7 @@
 "use client";
 import { Suspense, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import Box from "@mui/material/Box";
 import Typography from "@mui/material/Typography";
 import Button from "@mui/material/Button";
@@ -9,6 +10,7 @@ import ButtonBase from "@mui/material/ButtonBase";
 import { BarChart } from "@mui/x-charts/BarChart";
 import { PieChart } from "@mui/x-charts/PieChart";
 import ArrowForward from "@mui/icons-material/ArrowForward";
+import PictureAsPdf from "@mui/icons-material/PictureAsPdfOutlined";
 import TrendingUp from "@mui/icons-material/TrendingUp";
 import TrendingDown from "@mui/icons-material/TrendingDown";
 import Visibility from "@mui/icons-material/VisibilityOutlined";
@@ -131,6 +133,16 @@ function TopPost({ m }: { m: Mention }) {
   );
 }
 
+function ReportButton() {
+  const params = useSearchParams();
+  const qs = params.toString();
+  return (
+    <Button variant="outlined" startIcon={<PictureAsPdf />} component={Link} href={qs ? `/bericht?${qs}` : "/bericht"}>
+      Report als PDF
+    </Button>
+  );
+}
+
 function DashboardView() {
   const { mentions, loading, error, meta } = useData();
   const { filters } = useFilters();
@@ -206,6 +218,7 @@ function DashboardView() {
 
   return (
     <Box sx={{ display: "flex", flexDirection: "column", gap: { xs: 2, md: 3 } }}>
+      <Box sx={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 2, flexWrap: "wrap" }}>
       <Box>
         <Typography variant="h5" component="h1" sx={{ fontSize: { xs: 24, md: 28 } }}>
           Übersicht
@@ -215,6 +228,8 @@ function DashboardView() {
             ? `Zuletzt gesucht ${new Date(meta.lastRefresh).toLocaleString("de-DE", { dateStyle: "short", timeStyle: "short" })}`
             : "Noch keine Live-Suche, Aktualisieren startet die Suche"}
         </Typography>
+      </Box>
+        <ReportButton />
       </Box>
 
       <FilterBar />

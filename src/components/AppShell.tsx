@@ -185,6 +185,9 @@ function BarItems({ qs }: { qs: string }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const { refresh, refreshing } = useData();
+  const pathname = usePathname();
+  // The printable report renders without the app chrome.
+  if (pathname.startsWith("/bericht")) return <>{children}</>;
 
   // Source preview pages render without the app chrome.
 
