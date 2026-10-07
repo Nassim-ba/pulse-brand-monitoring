@@ -65,7 +65,6 @@ async function googleNews(s: Settings): Promise<RawMention[]> {
       url: String(it.link),
       author: publisher ?? null,
       publishedAt: new Date(it.pubDate ?? Date.now()).toISOString(),
-      isDemo: false,
     };
   });
 }
@@ -94,7 +93,6 @@ async function bingNews(s: Settings): Promise<RawMention[]> {
         url,
         author: null,
         publishedAt: new Date(it.pubDate ?? Date.now()).toISOString(),
-        isDemo: false,
       };
     });
 }
@@ -123,7 +121,6 @@ async function hackerNews(s: Settings): Promise<RawMention[]> {
       url,
       author: h.author,
       publishedAt: new Date(h.created_at).toISOString(),
-      isDemo: false,
     };
   });
 }

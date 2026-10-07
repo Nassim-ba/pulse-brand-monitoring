@@ -162,12 +162,6 @@ export default function SettingsPage() {
         <SwitchRow label="Google Suche" hint="Organische Suchergebnisse über Apify" checked={form.sources.googleSearch} onChange={(v) => set("sources", { ...form.sources, googleSearch: v })} />
         <SwitchRow label="Instagram" hint="Posts zu den Hashtags inklusive Likes und Kommentaren, über Apify" checked={form.sources.instagram} onChange={(v) => set("sources", { ...form.sources, instagram: v })} />
         <SwitchRow label="TikTok" hint="Videos zur Marke inklusive Aufrufen und Engagement, über Apify" checked={form.sources.tiktok} onChange={(v) => set("sources", { ...form.sources, tiktok: v })} />
-        <SwitchRow
-          label="Demo-Datensatz"
-          hint="Synthetische Beiträge aus Social Media, Bewertungsportalen und Foren (nur für ATZ Group)"
-          checked={form.demoData}
-          onChange={(v) => set("demoData", v)}
-        />
       </Card>
 
       <Box sx={{ display: "flex", gap: 1.5, flexWrap: "wrap" }}>
@@ -175,7 +169,7 @@ export default function SettingsPage() {
           Speichern
         </Button>
         <Button variant="outlined" startIcon={<RestartAlt />} disabled={saving} onClick={() => save(ATZ_DEFAULTS)}>
-          Auf ATZ-Demo zurücksetzen
+          Zurück zu ATZ Group
         </Button>
       </Box>
 

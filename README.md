@@ -2,14 +2,14 @@
 
 Pulse sammelt Erwähnungen einer Marke aus dem Netz, lässt jede Erwähnung von Claude bewerten und zeigt dem Kommunikationsteam auf einen Blick, wo es reagieren sollte.
 
-Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group.
+Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group. Pulse arbeitet ausschließlich mit echten, live abgerufenen Daten.
 
 ## Funktionen
 
 - **Markensuche** direkt in der oberen Leiste. Für neue Marken erstellt Claude automatisch ein Suchprofil (Suchbegriffe, Ausschlussbegriffe, Hashtags, Kontext). Bereits gesuchte Marken lassen sich schnell wechseln.
 - **Social Media und Google** über Apify: Instagram-Posts zu Hashtags, TikTok-Videos und organische Google-Ergebnisse, jeweils mit Reichweite und Engagement. Dazu Google News, Bing News und Hacker News.
 - **Reichweite und Engagement**: Top-Beiträge nach Reichweite, Interaktionen pro Plattform, Kritik mit großer Reichweite wird dringlicher eingestuft.
-- **Relevanz, Stimmung und Thema** für jede Erwähnung, inklusive Begründung. Verwechslungen (Autohaus ATZ, Altersteilzeit, Automobiltechnische Zeitschrift) erkennt die KI und sortiert sie aus.
+- **Relevanz, Stimmung und Thema** für jede Erwähnung, inklusive Begründung. Verwechslungen mit gleichnamigen Firmen oder Abkürzungen erkennt die KI und sortiert sie aus.
 - **Handlungsbedarf** mit Dringlichkeit, Begründung, empfohlener Maßnahme und Antwortvorschlag. Beiträge lassen sich als erledigt markieren.
 - **KI-Lagebericht** für jeden Zeitraum und jede Filterauswahl.
 - **Filter für die gesamte Auswertung** nach Zeitraum, Plattform, Stimmung, Thema, Relevanz und Handlungsbedarf. Kennzahlen, Diagramme und Lagebericht rechnen mit der Auswahl. Filter stehen in der URL und lassen sich teilen.
@@ -21,7 +21,6 @@ Gebaut als MVP für die ATZ Group, voreingestellt auf die Marke ATZ Group.
 ```
 Apify (Instagram, TikTok, Google Suche), asynchron ─┐
 Live-Feeds (Google News, Bing News, Hacker News) ───┤
-Demo-Datensatz (synthetisch, gekennzeichnet) ───────┤
                                                     ▼
                           Next.js API (Vercel Functions)
                                                     │

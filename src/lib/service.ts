@@ -4,15 +4,13 @@ import { aiEnabled, aiStatus, analyzeMentions, generateProfile, summarize } from
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
 import { validateBrandInput } from "./validate";
-import { demoMentions } from "./demo-data";
 import { applyFilters, brandSlug } from "./filters";
 import { fetchLiveMentions } from "./sources";
 import { store, storageMode } from "./store";
 import type { Analysis, Mention, MentionFilters, SearchJob, Settings, Summary } from "./types";
 
 const SEARCH_COOLDOWN_MS = 10 * 60_000; // per brand
-const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget on the public demo
-const DEMO_VERSION = 2;
+const DAILY_SEARCH_LIMIT = 30; // protects the Apify/Claude budget of the public app
 
 export class CooldownError extends Error {}
 
@@ -56,7 +54,7 @@ async function analyzePending(settings: Settings, mentions: Mention[]): Promise<
 }
 
 /**
- * Seeds demo data (if enabled) and makes sure everything gets analysed. With
+ * Loads the mentions of the active brand and makes sure everything gets analysed. With
  * `background`, the response is not held up: analysis runs after it is sent and
  * the client picks up the results on its next fetch.
  */
@@ -64,14 +62,6 @@ export async function loadMentions({ background = false } = {}): Promise<{ setti
   const settings = await store.getSettings();
   const brand = brandSlug(settings.brand);
 
-  if (settings.demoData && brand === "atz-group") {
-    const seeded = await store.getKv<number | boolean>(`seeded:${brand}`);
-    if (seeded !== DEMO_VERSION) {
-      if (seeded) await store.deleteDemo(brand); // reseed when the demo set changed
-      await store.insertMentions(demoMentions(brand));
-      await store.setKv(`seeded:${brand}`, DEMO_VERSION);
-    }
-  }
 
   let mentions = await store.listMentions(brand);
   if (background) {
@@ -82,7 +72,6 @@ export async function loadMentions({ background = false } = {}): Promise<{ setti
     const results = await analyzePending(settings, mentions);
     mentions = mentions.map((m) => (results.has(m.id) ? { ...m, analysis: results.get(m.id)! } : m));
   }
-  if (!settings.demoData) mentions = mentions.filter((m) => !m.isDemo);
   return { settings, mentions };
 }
 
@@ -90,7 +79,7 @@ export async function loadMentions({ background = false } = {}): Promise<{ setti
 
 /** Profiles from before logo support get the official name and domain filled in once. */
 async function backfillProfile(settings: Settings): Promise<Settings> {
-  if (settings.domain || settings.demoData) return settings;
+  if (settings.domain) return settings;
   const refreshed = await generateProfile(settings.brand);
   await recordAiStatus();
   return refreshed?.isBrand && brandSlug(refreshed.brand) === brandSlug(settings.brand)

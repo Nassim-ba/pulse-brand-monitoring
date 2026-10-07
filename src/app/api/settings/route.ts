@@ -16,7 +16,6 @@ const SettingsSchema = z.object({
     instagram: z.boolean(),
     tiktok: z.boolean(),
   }),
-  demoData: z.boolean(),
 });
 
 export async function GET() {

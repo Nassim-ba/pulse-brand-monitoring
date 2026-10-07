@@ -14,7 +14,6 @@ interface BaseStore {
   insertMentions(items: RawMention[]): Promise<number>;
   saveAnalysis(id: string, analysis: Analysis): Promise<void>;
   setStatus(id: string, status: MentionStatus): Promise<Mention | null>;
-  deleteDemo(brand: string): Promise<void>;
   getKv<T>(key: string): Promise<T | null>;
   setKv<T>(key: string, value: T): Promise<void>;
 }
@@ -44,6 +43,8 @@ function createPgStore(url: string): BaseStore {
         status text NOT NULL DEFAULT 'open'
       )`;
       await sql`ALTER TABLE mentions ADD COLUMN IF NOT EXISTS metrics jsonb`;
+      // Pulse only works with real data; remove the synthetic set earlier versions seeded.
+      await sql`DELETE FROM mentions WHERE is_demo = true`;
       await sql`CREATE INDEX IF NOT EXISTS mentions_brand_idx ON mentions (brand, published_at DESC)`;
       await sql`CREATE TABLE IF NOT EXISTS kv (
         key text PRIMARY KEY,
@@ -64,7 +65,6 @@ function createPgStore(url: string): BaseStore {
     author: (r.author as string) ?? null,
     publishedAt: new Date(r.published_at as string).toISOString(),
     fetchedAt: new Date(r.fetched_at as string).toISOString(),
-    isDemo: r.is_demo as boolean,
     analysis: (r.analysis as Analysis) ?? null,
     status: r.status as MentionStatus,
     metrics: (r.metrics as Metrics) ?? null,
@@ -82,9 +82,9 @@ function createPgStore(url: string): BaseStore {
       for (const m of items) {
         // Skip duplicates by id and by URL within the same brand.
         const rows = await sql`INSERT INTO mentions
-          (id, brand, source, source_label, kind, title, content, url, author, published_at, is_demo, metrics)
+          (id, brand, source, source_label, kind, title, content, url, author, published_at, metrics)
           SELECT ${m.id}, ${m.brand}, ${m.source}, ${m.sourceLabel}, ${m.kind}, ${m.title}, ${m.content},
-                 ${m.url}, ${m.author}, ${m.publishedAt}, ${m.isDemo}, ${m.metrics ? JSON.stringify(m.metrics) : null}::jsonb
+                 ${m.url}, ${m.author}, ${m.publishedAt}, ${m.metrics ? JSON.stringify(m.metrics) : null}::jsonb
           WHERE NOT EXISTS (SELECT 1 FROM mentions WHERE brand = ${m.brand} AND url = ${m.url})
           ON CONFLICT (id) DO NOTHING RETURNING id`;
         inserted += rows.length;
@@ -99,10 +99,6 @@ function createPgStore(url: string): BaseStore {
       await init();
       const rows = await sql`UPDATE mentions SET status = ${status} WHERE id = ${id} RETURNING *`;
       return rows[0] ? toMention(rows[0]) : null;
-    },
-    async deleteDemo(brand) {
-      await init();
-      await sql`DELETE FROM mentions WHERE brand = ${brand} AND is_demo = true`;
     },
     async getKv<T>(key: string) {
       await init();
@@ -151,9 +147,6 @@ function createMemoryStore(): BaseStore {
       m.status = status;
       return m;
     },
-    async deleteDemo(brand) {
-      for (const [id, m] of db.mentions) if (m.brand === brand && m.isDemo) db.mentions.delete(id);
-    },
     async getKv<T>(key: string) {
       return (db.kv.get(key) as T) ?? null;
     },
@@ -175,9 +168,8 @@ function withDefaults(p: Partial<Settings>): Settings {
     ...DEFAULT_SETTINGS,
     // Brand-specific defaults must not leak into other brands' profiles.
     domain: isDefaultBrand ? DEFAULT_SETTINGS.domain : undefined,
-    demoData: isDefaultBrand ? DEFAULT_SETTINGS.demoData : false,
     ...p,
-    ...(!isDefaultBrand ? { demoData: false, ...(p.domain === DEFAULT_SETTINGS.domain ? { domain: undefined } : {}) } : {}),
+    ...(!isDefaultBrand && p.domain === DEFAULT_SETTINGS.domain ? { domain: undefined } : {}),
     hashtags: p.hashtags ?? (p.brand && p.brand !== DEFAULT_SETTINGS.brand ? [p.brand.toLowerCase().replace(/[^a-z0-9]/g, "")] : DEFAULT_SETTINGS.hashtags),
     sources: { ...DEFAULT_SETTINGS.sources, ...(p.sources ?? {}) },
   };

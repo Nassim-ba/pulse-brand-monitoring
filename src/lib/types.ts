@@ -55,7 +55,6 @@ export interface RawMention {
   url: string;
   author: string | null;
   publishedAt: string; // ISO
-  isDemo: boolean;
   metrics?: Metrics | null;
 }
 
@@ -80,7 +79,6 @@ export interface Settings {
     instagram: boolean;
     tiktok: boolean;
   };
-  demoData: boolean;
 }
 
 export type SourceRunStatus = "queued" | "running" | "done" | "error" | "skipped";

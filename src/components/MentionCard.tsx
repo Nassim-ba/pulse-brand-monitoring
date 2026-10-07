@@ -77,7 +77,6 @@ export function MentionCard({ mention, showAction = false }: { mention: Mention;
                   ) : null}
                   <SentimentTag sentiment={a.sentiment} />
                   <TopicTag topic={a.topic} />
-                  {mention.isDemo ? <Tag outlined>Demo</Tag> : null}
                   {mention.metrics?.views != null ? (
                     <Tag icon={<Visibility />}>{compact(mention.metrics.views)}</Tag>
                   ) : mention.metrics?.likes != null ? (

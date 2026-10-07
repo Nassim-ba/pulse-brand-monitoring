@@ -16,7 +16,7 @@ import Check from "@mui/icons-material/Check";
 import Replay from "@mui/icons-material/Replay";
 import { KIND_LABELS } from "@/lib/labels";
 import { useData } from "./DataProvider";
-import { AnalyzedBy, RelevanceMeter, SentimentTag, SourceAvatar, Tag, TopicTag, UrgencyTag } from "./bits";
+import { AnalyzedBy, RelevanceMeter, SentimentTag, SourceAvatar, TopicTag, UrgencyTag } from "./bits";
 
 function Field({ label, children }: { label: string; children: React.ReactNode }) {
   return (
@@ -90,11 +90,6 @@ function Content() {
         >
           Originalquelle öffnen
         </Button>
-        {m.isDemo ? (
-          <Typography variant="caption" component="p" sx={{ color: "var(--md-on-surface-variant)", mt: -2, mb: 3 }}>
-            Synthetischer Demo-Beitrag, Personen und Inhalte sind fiktiv.
-          </Typography>
-        ) : null}
 
         <Divider sx={{ mb: 2.5, borderColor: "var(--md-outline-variant)" }} />
 
@@ -172,7 +167,6 @@ function Content() {
                 </Box>
               </Field>
             ) : null}
-            {m.isDemo ? null : <Tag outlined>Live-Quelle</Tag>}
           </>
         ) : (
           <Typography variant="body2">Analyse läuft …</Typography>

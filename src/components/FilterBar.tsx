@@ -34,7 +34,7 @@ export function FilterBar({ withSearch = false, withSort = false }: { withSearch
 
   const sourceOptions = useMemo(() => {
     const map = new Map<string, string>();
-    mentions.forEach((m) => map.set(m.source, m.sourceLabel.split(" · ")[0] + (m.isDemo ? " (Demo)" : "")));
+    mentions.forEach((m) => map.set(m.source, m.sourceLabel.split(" · ")[0]));
     return [...map].map(([value, label]) => ({ value, label })).sort((a, b) => a.label.localeCompare(b.label));
   }, [mentions]);
 

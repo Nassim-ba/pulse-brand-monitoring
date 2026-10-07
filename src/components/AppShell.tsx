@@ -181,11 +181,9 @@ function BarItems({ qs }: { qs: string }) {
 }
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
   const { refresh, refreshing } = useData();
 
   // Source preview pages render without the app chrome.
-  if (pathname.startsWith("/quelle/")) return <>{children}</>;
 
   return (
     <Box sx={{ display: "flex", minHeight: "100dvh", bgcolor: "var(--md-surface)" }}>

@@ -62,7 +62,6 @@ export const APIFY_SOURCES: ApifySource[] = [
         url,
         author: it.ownerUsername ? `@${str(it.ownerUsername)}` : null,
         publishedAt: new Date(str(it.timestamp) || Date.now()).toISOString(),
-        isDemo: false,
         metrics: {
           likes: num(it.likesCount),
           comments: num(it.commentsCount),
@@ -100,7 +99,6 @@ export const APIFY_SOURCES: ApifySource[] = [
         url,
         author: author?.name ? `@${author.name}` : null,
         publishedAt: new Date(str(it.createTimeISO) || (num(it.createTime) ?? Date.now() / 1000) * 1000).toISOString(),
-        isDemo: false,
         metrics: {
           likes: num(it.diggCount),
           comments: num(it.commentCount),
@@ -153,7 +151,6 @@ function mapGooglePage(page: Record<string, unknown>, s: Settings): RawMention[]
         url,
         author: host || null,
         publishedAt: r.date && !Number.isNaN(Date.parse(str(r.date))) ? new Date(str(r.date)).toISOString() : new Date().toISOString(),
-        isDemo: false,
       };
     });
 }
