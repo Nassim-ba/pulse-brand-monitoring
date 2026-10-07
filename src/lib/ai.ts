@@ -237,6 +237,12 @@ Schreibe sachlich, konkret und auf Deutsch. Nenne Zahlen und Muster, keine Allge
 // ---------- Brand profile ----------
 
 const ProfileSchema = z.object({
+  is_brand: z
+    .boolean()
+    .describe("true nur, wenn die Eingabe eine Marke, ein Unternehmen, ein Produkt, eine Organisation oder ein Verein ist."),
+  rejection_reason: z.string().nullable().describe("Kurze Begründung auf Deutsch, falls is_brand false ist, sonst null."),
+  brand_name: z.string().describe("Offizielle Schreibweise der Marke, z. B. Porsche statt porsche."),
+  domain: z.string().nullable().describe("Offizielle Website-Domain ohne https und Pfad, z. B. porsche.com. null, wenn unbekannt."),
   keywords: z
     .array(z.string())
     .describe("3 bis 7 spezifische Suchbegriffe: Markenname, gängige Kurzform, Domain, Produkt- oder Divisionsnamen. Keine allgemeinen Wörter oder Städtenamen allein."),
@@ -245,25 +251,37 @@ const ProfileSchema = z.object({
   context: z.string().describe("2 bis 3 Sätze: Was macht die Marke, Branche, Sitz. Danach, welche gleichnamigen Dinge nicht gemeint sind."),
 });
 
-/** Lets Claude draft a monitoring profile for a newly searched brand. */
-export async function generateProfile(brand: string): Promise<Pick<Settings, "keywords" | "excludeKeywords" | "hashtags" | "context"> | null> {
+export type BrandProfile =
+  | { isBrand: false; reason: string }
+  | ({ isBrand: true } & Pick<Settings, "brand" | "domain" | "keywords" | "excludeKeywords" | "hashtags" | "context">);
+
+/** Checks that the input is a brand and lets Claude draft its monitoring profile. */
+export async function generateProfile(input: string): Promise<BrandProfile | null> {
   if (!client) return null;
   try {
     const response = await client.messages.parse({
       model: MODEL,
       max_tokens: 1500,
-      system:
-        "Du richtest Brand Monitoring ein. Erstelle für die genannte Marke ein Suchprofil. Wenn du die Marke nicht sicher kennst, bleib allgemein und erfinde keine Fakten. Antworte auf Deutsch, ohne Gedankenstriche.",
-      messages: [{ role: "user", content: `Marke: ${brand}` }],
+      system: `Du richtest Brand Monitoring ein. Prüfe zuerst, ob die Eingabe eine Marke ist.
+Marken sind Unternehmen, Produkte, Organisationen, Vereine, Institutionen und Medien, auch kleine oder regionale.
+Keine Marken sind Allgemeinbegriffe (Auto, Wetter, Liebe), Sätze und Fragen, Tastaturgetippe und Unsinn, Beleidigungen sowie Namen von Privatpersonen.
+Bekannte Tippfehler einer Marke korrigierst du (Adiddas wird Adidas).
+Ist es eine Marke, erstelle ein Suchprofil. Wenn du die Marke nicht sicher kennst, bleib allgemein und erfinde keine Fakten. Antworte auf Deutsch, ohne Gedankenstriche.`,
+      messages: [{ role: "user", content: `Eingabe: ${input}` }],
       output_config: { format: zodOutputFormat(ProfileSchema) },
     });
     const p = response.parsed_output;
     if (!p) return null;
     aiStatus.ok = true;
+    if (!p.is_brand) return { isBrand: false, reason: clean(p.rejection_reason) ?? "Keine erkennbare Marke." };
     const tidy = (list: string[], max: number) => [...new Set(list.map((x) => x.trim()).filter((x) => x.length >= 2 && x.length <= 60))].slice(0, max);
-    const keywords = tidy([brand, ...p.keywords], 8);
+    const brand = p.brand_name.trim().slice(0, 60) || input;
+    const domain = p.domain?.trim().toLowerCase().replace(/^https?:\/\//, "").replace(/\/.*$/, "");
     return {
-      keywords,
+      isBrand: true,
+      brand,
+      domain: domain && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(domain) ? domain : undefined,
+      keywords: tidy([brand, ...p.keywords], 8),
       excludeKeywords: tidy(p.exclude_keywords, 5),
       hashtags: tidy(p.hashtags.map((h) => h.replace(/[^\p{L}\p{N}_]/gu, "")), 3),
       context: clean(p.context)!.slice(0, 1500),

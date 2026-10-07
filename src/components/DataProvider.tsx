@@ -90,7 +90,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
         setRefreshing(false);
         if (next) {
           const total = Object.values(next.sources).reduce((n, x) => n + (x.count ?? 0), 0);
-          setMessage(total ? `${total} neue Erwähnungen gefunden und analysiert.` : "Suche abgeschlossen, keine neuen Erwähnungen.");
+          setMessage(total ? `Suche abgeschlossen, ${total} Beiträge gefunden und analysiert.` : "Suche abgeschlossen, keine Beiträge gefunden.");
         }
       }
     } catch {

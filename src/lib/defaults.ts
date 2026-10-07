@@ -2,6 +2,7 @@ import type { Settings } from "./types";
 
 export const DEFAULT_SETTINGS: Settings = {
   brand: "ATZ Group",
+  domain: "atz.group",
   keywords: ["ATZ Group", "ATZ AG", "atz.de", "ATZ Marketing", "ATZ Media", "ATZ Recruiting", "ATZ Intelligence"],
   excludeKeywords: ["Altersteilzeit"],
   hashtags: ["atzgroup", "atzmarketing"],
@@ -17,6 +18,7 @@ export function basicProfile(brand: string): Settings {
   return {
     ...DEFAULT_SETTINGS,
     brand,
+    domain: undefined,
     keywords: [brand],
     excludeKeywords: [],
     hashtags: tag ? [tag] : [],

@@ -3,6 +3,7 @@ import { store } from "@/lib/store";
 
 const SettingsSchema = z.object({
   brand: z.string().trim().min(2).max(60),
+  domain: z.string().trim().max(100).optional(),
   keywords: z.array(z.string().trim().min(2).max(60)).max(15),
   excludeKeywords: z.array(z.string().trim().min(2).max(60)).max(15),
   hashtags: z.array(z.string().trim().regex(/^[\p{L}\p{N}_]{2,40}$/u)).max(5),

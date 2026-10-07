@@ -2,6 +2,7 @@ import "server-only";
 import { aiEnabled, aiStatus, analyzeMentions, generateProfile, summarize } from "./ai";
 import { APIFY_SOURCES, apifyEnabled, fetchResults, runState, startRun } from "./apify";
 import { basicProfile } from "./defaults";
+import { validateBrandInput } from "./validate";
 import { demoMentions } from "./demo-data";
 import { applyFilters, brandSlug } from "./filters";
 import { fetchLiveMentions } from "./sources";
@@ -62,8 +63,33 @@ export async function loadMentions(): Promise<{ settings: Settings; mentions: Me
 // ---------- Brand search ----------
 
 export class LimitError extends Error {}
+export class NotBrandError extends Error {}
+
+
 
 const jobKey = (slug: string) => `job:${slug}`;
+const isActive = (st: string) => st === "running" || st === "queued";
+
+type JobEntry = SearchJob["sources"][string];
+
+/**
+ * Starts an Apify run for one source. When the account's concurrency limit is
+ * reached the source stays queued and is retried on the next poll.
+ */
+async function tryStart(src: (typeof APIFY_SOURCES)[number], settings: Settings, entry: JobEntry): Promise<void> {
+  try {
+    const { runId, datasetId } = await startRun(src, settings);
+    Object.assign(entry, { status: "running", runId, datasetId, note: undefined });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/concurrent-runs-limit|rate-limit|429/.test(message)) {
+      Object.assign(entry, { status: "queued", note: "Wartet auf einen freien Apify-Slot" });
+      return;
+    }
+    console.error(`Apify start failed (${src.key}):`, err);
+    Object.assign(entry, { status: "error", note: `Start fehlgeschlagen. ${message.replace(/\s+/g, " ").slice(0, 160)}` });
+  }
+}
 
 /**
  * Starts a search for a brand: creates the profile (via Claude for new brands),
@@ -71,20 +97,44 @@ const jobKey = (slug: string) => `job:${slug}`;
  */
 export async function startSearch(brandName?: string): Promise<SearchJob> {
   const current = await store.getSettings();
-  const name = (brandName ?? current.brand).trim().slice(0, 60);
-  const slug = brandSlug(name);
+  const name = (brandName ?? current.brand).trim().replace(/\s+/g, " ").slice(0, 60);
+  const invalid = validateBrandInput(name);
+  if (invalid) throw new NotBrandError(invalid);
 
-  const existing = await store.getKv<SearchJob>(jobKey(slug));
-  let settings = await store.getProfile(slug);
+  let settings = await store.getProfile(brandSlug(name));
   if (!settings) {
     const profile = await generateProfile(name);
     await recordAiStatus();
-    settings = { ...basicProfile(name), ...(profile ?? {}) };
+    if (profile && !profile.isBrand) throw new NotBrandError(`„${name}“ ist keine erkennbare Marke. ${profile.reason}`);
+    if (profile?.isBrand) {
+      const { brand, domain, keywords, excludeKeywords, hashtags, context } = profile;
+      const fields = { brand, domain, keywords, excludeKeywords, hashtags, context };
+      // The canonical name may map to an already known brand ("adiddas" → "Adidas").
+      settings = (await store.getProfile(brandSlug(fields.brand))) ?? { ...basicProfile(fields.brand), ...fields };
+    } else {
+      settings = basicProfile(name);
+    }
+  } else if (!settings.domain && !settings.demoData) {
+    // Profiles from before logo support get name and domain filled in once.
+    const refreshed = await generateProfile(settings.brand);
+    await recordAiStatus();
+    if (refreshed?.isBrand && brandSlug(refreshed.brand) === brandSlug(settings.brand)) {
+      settings = { ...settings, brand: refreshed.brand, domain: refreshed.domain };
+    }
   }
   await store.saveSettings(settings);
+  const slug = brandSlug(settings.brand);
+  const existing = await store.getKv<SearchJob>(jobKey(slug));
 
-  // Recent or running searches are reused instead of paying again.
+  // Recent or running searches are reused instead of paying again. Sources that
+  // failed are retried, so a search always ends up covering every enabled source.
   if (existing && (existing.status === "running" || Date.now() - new Date(existing.startedAt).getTime() < SEARCH_COOLDOWN_MS)) {
+    const failed = APIFY_SOURCES.filter((src) => existing.sources[src.key]?.status === "error" && settings.sources[src.key] && apifyEnabled);
+    if (failed.length) {
+      await Promise.all(failed.map((src) => tryStart(src, settings, existing.sources[src.key])));
+      existing.status = Object.values(existing.sources).some((x) => isActive(x.status)) ? "running" : "done";
+      await store.setKv(jobKey(slug), existing);
+    }
     return existing;
   }
 
@@ -104,11 +154,11 @@ export async function startSearch(brandName?: string): Promise<SearchJob> {
 
   // News feeds answer within seconds.
   const news = await fetchLiveMentions(settings);
-  const inserted = await store.insertMentions(news.mentions);
+  await store.insertMentions(news.mentions);
   job.sources.news = {
     label: "News (Google, Bing, Hacker News)",
     status: news.errors.length && !news.mentions.length ? "error" : "done",
-    count: inserted,
+    count: news.mentions.length,
     note: news.errors.join(", ") || undefined,
   };
 
@@ -119,19 +169,13 @@ export async function startSearch(brandName?: string): Promise<SearchJob> {
       } else if (!apifyEnabled) {
         job.sources[src.key] = { label: src.label, status: "skipped", note: "Kein Apify-Token hinterlegt" };
       } else {
-        try {
-          const { runId, datasetId } = await startRun(src, settings);
-          job.sources[src.key] = { label: src.label, status: "running", runId, datasetId };
-        } catch (err) {
-          console.error(`Apify start failed (${src.key}):`, err);
-          const detail = err instanceof Error ? err.message.replace(/\s+/g, " ").slice(0, 160) : "";
-          job.sources[src.key] = { label: src.label, status: "error", note: `Start fehlgeschlagen. ${detail}`.trim() };
-        }
+        job.sources[src.key] = { label: src.label, status: "queued" };
+        await tryStart(src, settings, job.sources[src.key]);
       }
     }),
   );
 
-  job.status = Object.values(job.sources).some((x) => x.status === "running") ? "running" : "done";
+  job.status = Object.values(job.sources).some((x) => isActive(x.status)) ? "running" : "done";
   await store.setKv(jobKey(slug), job);
   await store.setKv(`lastRefresh:${slug}`, job.startedAt);
   return job;
@@ -150,6 +194,11 @@ export async function pollSearch(): Promise<SearchJob | null> {
   await Promise.all(
     APIFY_SOURCES.map(async (src) => {
       const entry = job.sources[src.key];
+      if (entry?.status === "queued") {
+        if (stale) Object.assign(entry, { status: "error", note: "Kein freier Apify-Slot, bitte erneut suchen" });
+        else await tryStart(src, settings, entry);
+        return;
+      }
       if (!entry || entry.status !== "running" || !entry.runId || !entry.datasetId) return;
       try {
         const state = await runState(entry.runId);
@@ -161,10 +210,11 @@ export async function pollSearch(): Promise<SearchJob | null> {
         const items = await fetchResults(src, entry.datasetId, settings);
         const excludes = settings.excludeKeywords.map((k) => k.toLowerCase());
         const kept = items.filter((m) => !excludes.some((e) => `${m.title} ${m.content}`.toLowerCase().includes(e)));
-        const inserted = await store.insertMentions(kept);
+        await store.insertMentions(kept);
+        // Count what the source found; concurrent polls may insert the same rows.
         Object.assign(entry, {
           status: state === "failed" && !items.length ? "error" : "done",
-          count: inserted,
+          count: kept.length,
           note: state === "failed" ? "Lauf abgebrochen" : undefined,
         });
       } catch (err) {
@@ -174,7 +224,7 @@ export async function pollSearch(): Promise<SearchJob | null> {
     }),
   );
 
-  if (!Object.values(job.sources).some((x) => x.status === "running")) job.status = "done";
+  if (!Object.values(job.sources).some((x) => isActive(x.status))) job.status = "done";
   await store.setKv(jobKey(slug), job);
   await loadMentions(); // analyse what came in
   return job;

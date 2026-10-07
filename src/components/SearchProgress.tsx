@@ -10,6 +10,7 @@ import CheckCircle from "@mui/icons-material/CheckCircle";
 import ErrorOutline from "@mui/icons-material/ErrorOutlineOutlined";
 import RemoveCircleOutline from "@mui/icons-material/RemoveCircleOutlineOutlined";
 import Close from "@mui/icons-material/Close";
+import HourglassEmpty from "@mui/icons-material/HourglassEmpty";
 import { useData } from "./DataProvider";
 
 /** Shows the progress of the running brand search per source. */
@@ -56,11 +57,13 @@ export function SearchProgress() {
                   }}
                 >
                   {s.status === "running" ? <CircularProgress size={14} /> : null}
+                  {s.status === "queued" ? <HourglassEmpty sx={{ color: "var(--md-on-surface-variant)" }} /> : null}
                   {s.status === "done" ? <CheckCircle sx={{ color: "var(--md-success)" }} /> : null}
                   {s.status === "error" ? <ErrorOutline sx={{ color: "var(--md-error)" }} /> : null}
                   {s.status === "skipped" ? <RemoveCircleOutline /> : null}
                   {s.label}
-                  {s.status === "done" ? ` · ${s.count ?? 0} neu` : ""}
+                  {s.status === "done" ? ` · ${s.count ?? 0} gefunden` : ""}
+                  {s.status === "queued" ? " · wartet" : ""}
                   {s.status === "skipped" ? " · aus" : ""}
                 </Box>
               </Tooltip>

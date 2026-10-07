@@ -67,6 +67,7 @@ export interface Mention extends RawMention {
 
 export interface Settings {
   brand: string;
+  domain?: string; // official website, used for the logo
   keywords: string[];
   excludeKeywords: string[];
   hashtags: string[];
@@ -82,7 +83,7 @@ export interface Settings {
   demoData: boolean;
 }
 
-export type SourceRunStatus = "running" | "done" | "error" | "skipped";
+export type SourceRunStatus = "queued" | "running" | "done" | "error" | "skipped";
 
 export interface SearchJob {
   id: string;

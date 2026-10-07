@@ -1,4 +1,4 @@
-import { LimitError, pollSearch, startSearch } from "@/lib/service";
+import { LimitError, NotBrandError, pollSearch, startSearch } from "@/lib/service";
 
 export const maxDuration = 120;
 
@@ -13,6 +13,7 @@ export async function POST(request: Request) {
     return Response.json({ job: await startSearch(brand) });
   } catch (err) {
     if (err instanceof LimitError) return Response.json({ error: err.message }, { status: 429 });
+    if (err instanceof NotBrandError) return Response.json({ error: err.message }, { status: 422 });
     console.error(err);
     return Response.json({ error: "Suche konnte nicht gestartet werden." }, { status: 500 });
   }

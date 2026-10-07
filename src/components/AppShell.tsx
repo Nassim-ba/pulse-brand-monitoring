@@ -23,7 +23,8 @@ import DarkMode from "@mui/icons-material/DarkModeOutlined";
 import LightMode from "@mui/icons-material/LightModeOutlined";
 import { useData } from "./DataProvider";
 import { MentionDetail } from "./MentionDetail";
-import { PulseLogo } from "./PulseLogo";
+import { PulseMark } from "./PulseLogo";
+import { BrandBadge } from "./BrandBadge";
 import { BrandSearch } from "./BrandSearch";
 import { SearchProgress } from "./SearchProgress";
 
@@ -181,7 +182,7 @@ function BarItems({ qs }: { qs: string }) {
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { settings, refresh, refreshing } = useData();
+  const { refresh, refreshing } = useData();
 
   // Source preview pages render without the app chrome.
   if (pathname.startsWith("/quelle/")) return <>{children}</>;
@@ -207,7 +208,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         }}
       >
         <Box sx={{ mb: 1 }}>
-          <PulseLogo size={36} />
+          <Box component={Link} href="/" aria-label="Zur Übersicht" sx={{ display: "block", lineHeight: 0 }}>
+            <PulseMark size={40} />
+          </Box>
         </Box>
         <Tooltip title="Neue Erwähnungen suchen" placement="right">
           <Fab size="medium" onClick={refresh} disabled={refreshing} aria-label="Neue Erwähnungen suchen" sx={{ mb: 3 }}>
@@ -231,24 +234,32 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             alignItems: "center",
             gap: 1,
             px: { xs: 2, md: 3 },
-            height: 64,
+            height: 72,
             bgcolor: "var(--md-surface)",
             borderBottom: { xs: "1px solid var(--md-outline-variant)", md: "none" },
           }}
         >
-          <Box sx={{ display: { xs: "block", md: "none" } }}>
-            <PulseLogo size={28} />
+          <Box component={Link} href="/" aria-label="Zur Übersicht" sx={{ display: { xs: "block", md: "none" }, lineHeight: 0 }}>
+            <PulseMark size={36} />
           </Box>
-          <Box sx={{ minWidth: 0, flex: { xs: 1, md: "0 1 260px" } }}>
-            <Typography variant="caption" sx={{ color: "var(--md-on-surface-variant)", display: "block", lineHeight: 1.2 }}>
-              Pulse · Brand Monitoring
-            </Typography>
-            <Typography variant="h6" noWrap sx={{ lineHeight: 1.25, fontSize: { xs: 18, md: 22 } }}>
-              {settings?.brand ?? " "}
-            </Typography>
+          <Box
+            component={Link}
+            href="/"
+            aria-label="Zur Übersicht"
+            sx={{ display: { xs: "none", md: "flex" }, flexDirection: "column", textDecoration: "none", flex: "0 0 auto", mr: 2 }}
+          >
+            <Box component="span" sx={{ fontSize: 22, fontWeight: 600, letterSpacing: -0.4, color: "var(--md-on-surface)", lineHeight: 1.1 }}>
+              Pulse
+            </Box>
+            <Box component="span" sx={{ fontSize: 11, fontWeight: 500, letterSpacing: 0.5, color: "var(--md-on-surface-variant)", lineHeight: 1.3 }}>
+              Brand Monitoring
+            </Box>
           </Box>
-          <Box sx={{ display: { xs: "none", md: "flex" }, flex: 1, justifyContent: "center", px: 2 }}>
+          <Box sx={{ display: { xs: "none", md: "flex" }, flex: 1, justifyContent: "center", px: 2, minWidth: 0 }}>
             <BrandSearch />
+          </Box>
+          <Box sx={{ flex: { xs: 1, md: "0 1 auto" }, minWidth: 0, ml: { xs: 0.5, md: 0 } }}>
+            <BrandBadge />
           </Box>
           <Box sx={{ display: { xs: "block", md: "none" } }}>
             <RefreshButton />

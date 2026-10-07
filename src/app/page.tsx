@@ -28,10 +28,25 @@ const RANGE_DAYS: Record<string, number> = { "7d": 7, "30d": 30, "90d": 90 };
 const RANGE_LABELS: Record<string, string> = { "7d": "Letzte 7 Tage", "30d": "Letzte 30 Tage", "90d": "Letzte 90 Tage", all: "Gesamter Zeitraum" };
 const PLATFORM_COLORS = ["var(--md-primary)", "var(--md-tertiary)", "var(--md-secondary)", "var(--md-outline)", "var(--md-success)", "var(--md-warning)"];
 
-function Kpi({ label, value, hint, trend, tone = "default" }: { label: string; value: string | number; hint?: string; trend?: number | null; tone?: "default" | "error" }) {
+function Kpi({
+  label,
+  value,
+  hint,
+  trend,
+  tone = "default",
+  wide = false,
+}: {
+  label: string;
+  value: string | number;
+  hint?: string;
+  trend?: number | null;
+  tone?: "default" | "error";
+  wide?: boolean;
+}) {
   return (
     <Box
       sx={{
+        gridColumn: wide ? { xs: "1 / -1", lg: "auto" } : undefined,
         p: 2.5,
         borderRadius: 4,
         bgcolor: tone === "error" ? "var(--md-error-container)" : "var(--md-surface-container)",
@@ -228,7 +243,7 @@ function DashboardView() {
               hint={high ? `${high} mit hoher Dringlichkeit` : "Keine hohe Dringlichkeit"}
               tone={high ? "error" : "default"}
             />
-            <Kpi label="Von der KI aussortiert" value={stats.irrelevant.length} hint="Verwechslungen und Fremdtreffer" />
+            <Kpi label="Von der KI aussortiert" value={stats.irrelevant.length} hint="Verwechslungen und Fremdtreffer" wide />
           </>
         )}
       </Box>

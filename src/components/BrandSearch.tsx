@@ -9,17 +9,22 @@ import History from "@mui/icons-material/History";
 import ArrowForward from "@mui/icons-material/ArrowForward";
 import IconButton from "@mui/material/IconButton";
 import { brandSlug } from "@/lib/filters";
+import { validateBrandInput } from "@/lib/validate";
 import { useData } from "./DataProvider";
 
 /** M3 search bar: enter a brand to start monitoring it, or pick a recently searched one. */
 export function BrandSearch() {
-  const { meta, search, switchBrand, refreshing, settings } = useData();
+  const { meta, search, switchBrand, refreshing, settings, toast } = useData();
   const [value, setValue] = useState("");
   const brands = meta?.brands ?? [];
 
   const submit = async (input: string) => {
     const name = input.trim();
-    if (name.length < 2) return;
+    const invalid = validateBrandInput(name);
+    if (invalid) {
+      toast(invalid);
+      return;
+    }
     setValue("");
     (document.activeElement as HTMLElement | null)?.blur();
     const known = brands.find((b) => b.slug === brandSlug(name));
